@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated player profile, Online PVP username, and cumulative career shootout statistics.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Display username used in Online PVP matches and on the back of the shooter jersey.",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "usernameLower": {
+          "type": "string",
+          "description": "Lowercase normalized username matching the reserved document ID.",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "bestScore": {
+          "type": "integer",
+          "description": "Highest score achieved in a single 60-second contest."
+        },
+        "totalShotsMade": {
+          "type": "integer",
+          "description": "Cumulative shots made across all sessions."
+        },
+        "totalShotsAttempted": {
+          "type": "integer",
+          "description": "Cumulative shots attempted across all sessions."
+        },
+        "totalCareerScore": {
+          "type": "integer",
+          "description": "Cumulative points scored across all sessions."
+        },
+        "allTimeBestStreak": {
+          "type": "integer",
+          "description": "Longest consecutive make streak across all sessions."
+        },
+        "contestsPlayed": {
+          "type": "integer",
+          "description": "Total completed contests."
+        },
+        "pvpWins": {
+          "type": "integer",
+          "description": "Total Online PVP wins against opponents."
+        },
+        "pvpLosses": {
+          "type": "integer",
+          "description": "Total Online PVP losses against opponents."
+        },
+        "pvpDraws": {
+          "type": "integer",
+          "description": "Total Online PVP draws against opponents."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "usernameLower",
+        "bestScore",
+        "totalShotsMade",
+        "totalShotsAttempted",
+        "totalCareerScore",
+        "allTimeBestStreak",
+        "contestsPlayed",
+        "pvpWins",
+        "pvpLosses",
+        "pvpDraws",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UsernameClaim": {
+      "title": "UsernameClaim",
+      "description": "Unique username reservation mapping lowercase username to owner UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Display casing of the reserved username.",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server reservation timestamp."
+        }
+      },
+      "required": ["uid", "username", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private owner-only user profile and career shootout stats."
+    },
+    "/usernames/{usernameLower}": {
+      "schema": { "$ref": "#/entities/UsernameClaim" },
+      "description": "Unique username reservation registry for Online PVP."
+    }
+  }
+}

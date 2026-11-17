@@ -1,0 +1,169 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: default-deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUsernameLower(val) {
+      return val is string && val.size() >= 3 && val.size() <= 16 && val.matches('^[a-z0-9_]+$');
+    }
+
+    function isValidUsername(val) {
+      return val is string && val.size() >= 3 && val.size() <= 16 && val.matches('^[a-zA-Z0-9_]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidNonNegInt(val, maxVal) {
+      return val is int && val >= 0 && val <= maxVal;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+        'uid',
+        'username',
+        'usernameLower',
+        'bestScore',
+        'totalShotsMade',
+        'totalShotsAttempted',
+        'totalCareerScore',
+        'allTimeBestStreak',
+        'contestsPlayed',
+        'pvpWins',
+        'pvpLosses',
+        'pvpDraws',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'username',
+        'usernameLower',
+        'bestScore',
+        'totalShotsMade',
+        'totalShotsAttempted',
+        'totalCareerScore',
+        'allTimeBestStreak',
+        'contestsPlayed',
+        'pvpWins',
+        'pvpLosses',
+        'pvpDraws',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.uid is string &&
+      data.uid == userId &&
+      isValidUsername(data.username) &&
+      isValidUsernameLower(data.usernameLower) &&
+      data.username.lower() == data.usernameLower &&
+      isValidNonNegInt(data.bestScore, 50000) &&
+      isValidNonNegInt(data.totalShotsMade, 10000000) &&
+      isValidNonNegInt(data.totalShotsAttempted, 10000000) &&
+      data.totalShotsAttempted >= data.totalShotsMade &&
+      isValidNonNegInt(data.totalCareerScore, 100000000) &&
+      isValidNonNegInt(data.allTimeBestStreak, 500) &&
+      isValidNonNegInt(data.contestsPlayed, 1000000) &&
+      isValidNonNegInt(data.pvpWins, 1000000) &&
+      isValidNonNegInt(data.pvpLosses, 1000000) &&
+      isValidNonNegInt(data.pvpDraws, 1000000) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidUsernameClaim(data, usernameLower) {
+      return data.keys().hasAll(['uid', 'username', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'username', 'createdAt']) &&
+        data.uid is string &&
+        data.uid == request.auth.uid &&
+        isValidUsername(data.username) &&
+        data.username.lower() == usernameLower &&
+        data.createdAt is timestamp;
+    }
+
+    // Owner-only user profile & career stats
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/usernames/$(incoming().usernameLower));
+
+      allow update: if isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'bestScore',
+              'totalShotsMade',
+              'totalShotsAttempted',
+              'totalCareerScore',
+              'allTimeBestStreak',
+              'contestsPlayed',
+              'pvpWins',
+              'pvpLosses',
+              'pvpDraws',
+              'updatedAt'
+            ]) &&
+            incoming().username == existing().username &&
+            incoming().usernameLower == existing().usernameLower
+          ) ||
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'username',
+              'usernameLower',
+              'updatedAt'
+            ]) &&
+            existsAfter(/databases/$(database)/documents/usernames/$(incoming().usernameLower))
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // Unique username reservations (single-doc get only; no scraping via list)
+    match /usernames/{usernameLower} {
+      allow get: if isSignedIn() && isValidUsernameLower(usernameLower);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+        isValidUsernameLower(usernameLower) &&
+        isValidUsernameClaim(incoming(), usernameLower) &&
+        incoming().createdAt == request.time;
+
+      allow update: if false;
+
+      allow delete: if isSignedIn() &&
+        isValidUsernameLower(usernameLower) &&
+        existing().uid == request.auth.uid;
+    }
+  }
+}

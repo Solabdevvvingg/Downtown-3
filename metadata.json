@@ -1,0 +1,6 @@
+{
+  "name": "Downtown 3",
+  "description": "A fast-paced 3-point basketball shootout contest. Time your release to drain consecutive threes and money balls before the 60-second shot clock expires.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
