@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithCredential,
   signInWithPopup,
   signOut,
   User,
 } from 'firebase/auth';
+import { RefreshCw } from 'lucide-react';
 import {
   auth,
   createUserProfileAtomic,
+  firebaseOAuthClientId,
   googleProvider,
   isUsernameAvailable,
   suggestUsernameFromDisplayName,
@@ -17,14 +19,49 @@ import {
 import { CareerStats, UserProfile } from '../game/types';
 
 interface AuthPageProps {
-  mode: 'AUTH' | 'USERNAME_SETUP';
+  mode: 'AUTH' | 'USERNAME_SETUP' | 'PROFILE_ERROR';
   firebaseUser: User | null;
   career: CareerStats;
+  profileSyncing?: boolean;
+  profileLoadError?: string | null;
+  onRetryProfileLoad?: () => void;
   onProfileReady: (profile: UserProfile) => void;
   onContinueAsGuest: () => void;
 }
 
-type AuthTab = 'SIGN_IN' | 'SIGN_UP';
+interface GisTokenResponse {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+}
+
+interface GisPopupError {
+  type?: 'popup_failed_to_open' | 'popup_closed' | 'unknown';
+  message?: string;
+}
+
+interface GisTokenClient {
+  requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
+}
+
+interface GoogleIdentityApi {
+  accounts?: {
+    oauth2?: {
+      initTokenClient: (config: {
+        client_id: string;
+        scope: string;
+        callback: (resp: GisTokenResponse) => void;
+        error_callback?: (err: GisPopupError) => void;
+      }) => GisTokenClient;
+    };
+  };
+}
+
+declare global {
+  interface Window {
+    google?: GoogleIdentityApi;
+  }
+}
 
 function mapAuthError(err: unknown): string {
   const code =
@@ -33,29 +70,19 @@ function mapAuthError(err: unknown): string {
       : '';
 
   if (code === 'auth/operation-not-allowed') {
-    return 'Email/password sign-in is disabled in Firebase Console. Use Continue with Google above.';
+    return 'Google Sign-In is disabled in Firebase Console. Enable Google under Authentication → Sign-in method.';
   }
-  if (code === 'auth/email-already-in-use') {
-    return 'An account with this email already exists. Switch to Sign In.';
+  if (code === 'auth/unauthorized-domain') {
+    return `Domain ${window.location.hostname} is not authorized in Firebase Auth Settings → Authorized domains.`;
   }
-  if (
-    code === 'auth/invalid-credential' ||
-    code === 'auth/wrong-password' ||
-    code === 'auth/user-not-found'
-  ) {
-    return 'Invalid email or password.';
-  }
-  if (code === 'auth/weak-password') {
-    return 'Password must be at least 6 characters.';
-  }
-  if (code === 'auth/invalid-email') {
-    return 'Please enter a valid email address.';
-  }
-  if (code === 'auth/popup-closed-by-user') {
-    return 'Google sign-in popup was closed before finishing.';
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+    return 'Google sign-in popup was closed before finishing. Try again when ready.';
   }
   if (code === 'auth/popup-blocked') {
-    return 'Popup was blocked by the browser. Allow popups and try again.';
+    return 'Popup was blocked by your browser. Allow popups for this site and tap Continue with Google again.';
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Network error while connecting to Firebase Auth. Check your connection or Brave Shields and retry.';
   }
   if (err instanceof Error && err.message) {
     return err.message;
@@ -67,15 +94,92 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   mode,
   firebaseUser,
   career,
+  profileSyncing = false,
+  profileLoadError = null,
+  onRetryProfileLoad,
   onProfileReady,
   onContinueAsGuest,
 }) => {
-  const [tab, setTab] = useState<AuthTab>('SIGN_IN');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [gisReady, setGisReady] = useState(false);
+  const tokenClientRef = useRef<GisTokenClient | null>(null);
+
+  const initGisClient = useCallback(() => {
+    if (!firebaseOAuthClientId) return false;
+    const oauth2 = window.google?.accounts?.oauth2;
+    if (!oauth2) return false;
+    if (tokenClientRef.current) {
+      setGisReady(true);
+      return true;
+    }
+
+    tokenClientRef.current = oauth2.initTokenClient({
+      client_id: firebaseOAuthClientId,
+      scope: 'openid email profile',
+      callback: async (resp: GisTokenResponse) => {
+        if (resp.error || !resp.access_token) {
+          setSubmitting(false);
+          if (resp.error === 'access_denied') {
+            setError('Google sign-in permission was cancelled. Please try again.');
+          } else if (resp.error === 'origin_mismatch') {
+            setError('Use the primary Continue with Google button above for this preview URL.');
+          } else {
+            setError(resp.error_description || resp.error || 'Google sign-in did not complete.');
+          }
+          return;
+        }
+
+        try {
+          const cred = GoogleAuthProvider.credential(null, resp.access_token);
+          await signInWithCredential(auth, cred);
+        } catch (err) {
+          setError(mapAuthError(err));
+        } finally {
+          setSubmitting(false);
+        }
+      },
+      error_callback: (err: GisPopupError) => {
+        setSubmitting(false);
+        if (err.type === 'popup_closed') {
+          setError('Google sign-in popup was closed before finishing. Try again when ready.');
+        } else if (err.type === 'popup_failed_to_open') {
+          setError('Popup was blocked by your browser. Allow popups for this site and retry.');
+        } else {
+          setError('Could not complete Google OAuth popup. Try the primary Continue with Google button.');
+        }
+      },
+    });
+    setGisReady(true);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (mode !== 'AUTH') return;
+    if (initGisClient()) return;
+
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src="https://accounts.google.com/gsi/client"]'
+    );
+    const onLoad = () => {
+      initGisClient();
+    };
+    if (existing) {
+      existing.addEventListener('load', onLoad);
+    }
+
+    const poll = window.setInterval(() => {
+      if (initGisClient()) {
+        window.clearInterval(poll);
+      }
+    }, 300);
+
+    return () => {
+      window.clearInterval(poll);
+      if (existing) existing.removeEventListener('load', onLoad);
+    };
+  }, [mode, initGisClient]);
 
   useEffect(() => {
     if (mode === 'USERNAME_SETUP' && firebaseUser) {
@@ -91,51 +195,44 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setSubmitting(true);
     try {
       await signInWithPopup(auth, googleProvider);
-      // onAuthStateChanged in App.tsx will fetch profile or advance to USERNAME_SETUP
+      // onAuthStateChanged in App.tsx will load profile or transition to USERNAME_SETUP
     } catch (err) {
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: unknown }).code ?? '')
+          : '';
+      // If popup failed due to network/authDomain issue and GIS token client is ready, try GIS seamlessly
+      if (
+        (code === 'auth/network-request-failed' || code === 'auth/internal-error') &&
+        (tokenClientRef.current || initGisClient()) &&
+        tokenClientRef.current
+      ) {
+        try {
+          tokenClientRef.current.requestAccessToken({ prompt: 'select_account' });
+          return;
+        } catch {
+          // Fall through to mapped Firebase popup error
+        }
+      }
       setError(mapAuthError(err));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEmailSubmit = async (ev: React.FormEvent) => {
-    ev.preventDefault();
+  const handleGisFallbackSignIn = () => {
     setError(null);
-
-    const cleanEmail = email.trim();
-    if (!cleanEmail || !password) {
-      setError('Enter both email and password.');
+    if (!tokenClientRef.current && !initGisClient()) {
+      setError('Google direct OAuth script is unavailable. Use Continue with Google above.');
       return;
     }
-
-    if (tab === 'SIGN_UP') {
-      const usernameErr = validateUsername(username);
-      if (usernameErr) {
-        setError(usernameErr);
-        return;
-      }
-    }
-
+    if (!tokenClientRef.current) return;
     setSubmitting(true);
     try {
-      if (tab === 'SIGN_IN') {
-        await signInWithEmailAndPassword(auth, cleanEmail, password);
-      } else {
-        const cleanUsername = username.trim();
-        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-        const available = await isUsernameAvailable(cleanUsername);
-        if (!available) {
-          setError('That PVP username is taken. Pick another below.');
-          return;
-        }
-        const profile = await createUserProfileAtomic(cred.user.uid, cleanUsername, career);
-        onProfileReady(profile);
-      }
+      tokenClientRef.current.requestAccessToken({ prompt: 'select_account' });
     } catch (err) {
-      setError(mapAuthError(err));
-    } finally {
       setSubmitting(false);
+      setError(mapAuthError(err));
     }
   };
 
@@ -162,11 +259,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       const profile = await createUserProfileAtomic(firebaseUser.uid, cleanUsername, career);
       onProfileReady(profile);
     } catch (err) {
-      setError(
-        err instanceof Error && err.message.includes('Missing or insufficient permissions')
-          ? 'Could not claim username — it may already be taken.'
-          : 'Failed to save your shooter profile. Please try again.'
-      );
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Quota exceeded')) {
+        setError('Daily Firebase database quota exceeded. Quota resets tomorrow.');
+      } else if (msg.includes('Missing or insufficient permissions')) {
+        setError('Could not claim username — it may already be taken.');
+      } else {
+        setError('Failed to save your shooter profile. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -177,31 +277,85 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     await signOut(auth);
   };
 
+  const headerSubtitle = profileSyncing
+    ? 'Restoring your shooter profile and career stats from the cloud...'
+    : mode === 'PROFILE_ERROR'
+      ? 'Signed into Google, but we hit a snag loading your saved shooter profile.'
+      : mode === 'USERNAME_SETUP'
+        ? 'Claim your unique handle for Online 1v1 PVP, Friends, Leagues, and cloud career stats.'
+        : 'Sign in with Google to save your career stats, join PVP Leagues, and challenge friends online.';
+
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#07090E]/82 p-3 sm:p-6 overflow-y-auto">
-      <div className="w-full max-w-md max-h-[94dvh] overflow-y-auto bg-[#12161F] border border-white/15 rounded-xl p-5 sm:p-7 my-auto">
+    <div className="fixed inset-0 z-[45] flex items-center justify-center bg-[#05070B]/90 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:p-6 overflow-y-auto">
+      <div className="w-full max-w-md max-h-[94dvh] overflow-y-auto bg-[#0F1117] border border-white/25 rounded-[4px] p-5 sm:p-7 my-auto shadow-2xl">
         {/* Brand Header */}
-        <div className="border-b border-white/10 pb-4 mb-5">
-          <div className="flex items-baseline gap-2">
-            <span className="font-display text-3xl sm:text-4xl font-extrabold tracking-wide text-[#F4EFE6]">
-              DOWNTOWN
-            </span>
-            <span className="font-display text-3xl sm:text-4xl font-extrabold text-[#F9631C]">
-              3
-            </span>
+        <div className="border-b border-white/20 pb-4 mb-5">
+          <div className="font-display text-3xl sm:text-4xl font-extrabold uppercase tracking-[-0.04em] leading-none text-[#00ffaa]">
+            Downtown 3
           </div>
-          <p className="text-xs sm:text-sm text-[#94A3B8] mt-1">
-            {mode === 'USERNAME_SETUP'
-              ? 'Claim your unique handle for Online 1v1 PVP and career stats.'
-              : 'Sign in or create an account to save career stats and compete in Online PVP.'}
+          <p className="text-xs sm:text-sm text-[#E2E8F0] mt-2 leading-relaxed">
+            {headerSubtitle}
           </p>
         </div>
 
-        {mode === 'USERNAME_SETUP' && firebaseUser ? (
-          <form onSubmit={handleUsernameSetupSubmit} className="space-y-4">
-            <div className="bg-[#0B0E14] border border-white/10 rounded-lg px-3.5 py-2.5 text-xs text-[#CBD5E1]">
+        {profileSyncing && firebaseUser ? (
+          <div className="space-y-4">
+            <div className="bg-[#07090E] border border-white/20 rounded-[2px] px-3.5 py-2.5 text-xs text-[#E2E8F0]">
               Signed in as{' '}
-              <span className="font-semibold text-[#F4EFE6]">
+              <span className="font-bold text-[#FFFFFF]">
+                {firebaseUser.email || firebaseUser.displayName || 'Player'}
+              </span>
+            </div>
+            <div className="flex items-center justify-center gap-2.5 py-6 font-mono text-xs font-bold uppercase tracking-wider text-[#00ffaa]">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Syncing Shooter Profile...</span>
+            </div>
+          </div>
+        ) : mode === 'PROFILE_ERROR' && firebaseUser ? (
+          <div className="space-y-4">
+            <div className="bg-[#07090E] border border-white/20 rounded-[2px] px-3.5 py-2.5 text-xs text-[#E2E8F0]">
+              Signed in as{' '}
+              <span className="font-bold text-[#FFFFFF]">
+                {firebaseUser.email || firebaseUser.displayName || 'Player'}
+              </span>
+            </div>
+
+            <div className="text-xs font-semibold text-[#FECACA] bg-[#EF4444]/18 border border-[#FECACA]/60 rounded-[2px] px-3.5 py-3 leading-relaxed">
+              {profileLoadError || 'Could not load your saved profile from Firestore.'}
+            </div>
+
+            <button
+              type="button"
+              onClick={onRetryProfileLoad}
+              className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 py-3 px-4 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] text-[#05070B] font-sans text-sm sm:text-base font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry Loading Profile</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSwitchAccount}
+              className="w-full py-2 text-xs font-semibold text-[#E2E8F0] hover:text-[#FFFFFF] transition-colors cursor-pointer"
+            >
+              Sign out &amp; use a different Google account
+            </button>
+
+            <div className="pt-2 border-t border-white/20 text-center">
+              <button
+                type="button"
+                onClick={onContinueAsGuest}
+                className="font-mono text-[11px] uppercase tracking-wider font-bold text-[#FFFFFF] hover:text-[#00ffaa] transition-colors cursor-pointer py-2 px-3"
+              >
+                Continue as Guest (Solo Practice)
+              </button>
+            </div>
+          </div>
+        ) : mode === 'USERNAME_SETUP' && firebaseUser ? (
+          <form onSubmit={handleUsernameSetupSubmit} className="space-y-4">
+            <div className="bg-[#07090E] border border-white/20 rounded-[2px] px-3.5 py-2.5 text-xs text-[#E2E8F0]">
+              Signed in as{' '}
+              <span className="font-bold text-[#FFFFFF]">
                 {firebaseUser.email || firebaseUser.displayName || 'Player'}
               </span>
             </div>
@@ -209,7 +363,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <div>
               <label
                 htmlFor="setup-username"
-                className="block text-xs font-medium text-[#CBD5E1] mb-1.5"
+                className="block font-mono text-[10px] uppercase tracking-[0.14em] font-bold text-[#FFFFFF] mb-1.5"
               >
                 Online PVP Username
               </label>
@@ -221,15 +375,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 value={username}
                 onChange={(ev) => setUsername(ev.target.value)}
                 placeholder="e.g. CurryRange30"
-                className="w-full px-3.5 py-2.5 rounded-lg bg-[#0B0E14] border border-white/15 text-sm text-[#F4EFE6] placeholder:text-[#64748B] focus:outline-none focus:border-[#F9631C]"
+                className="w-full px-3.5 py-2.5 rounded-[2px] bg-[#07090E] border border-white/30 text-base sm:text-sm text-[#FFFFFF] placeholder:text-[#CBD5E1] focus:outline-none focus:border-[#00ffaa]"
               />
-              <div className="text-[11px] text-[#94A3B8] mt-1.5">
+              <div className="text-[11px] font-medium text-[#E2E8F0] mt-1.5">
                 3–16 characters · letters, numbers, and underscores only
               </div>
             </div>
 
             {error && (
-              <div className="text-xs text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/25 rounded-lg px-3 py-2">
+              <div className="text-xs font-semibold text-[#FECACA] bg-[#EF4444]/18 border border-[#FECACA]/60 rounded-[2px] px-3 py-2">
                 {error}
               </div>
             )}
@@ -237,7 +391,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 rounded-lg bg-[#F9631C] hover:bg-[#FB7A3C] disabled:opacity-50 text-[#0B0E14] font-display text-2xl font-extrabold tracking-wide transition-colors cursor-pointer"
+              className="w-full min-h-[48px] py-3.5 px-4 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-sans text-sm sm:text-base font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
             >
               {submitting ? 'Claiming Username...' : 'Enter Arena'}
             </button>
@@ -245,21 +399,38 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <button
               type="button"
               onClick={handleSwitchAccount}
-              className="w-full py-2 text-xs font-medium text-[#94A3B8] hover:text-[#F4EFE6] transition-colors cursor-pointer"
+              className="w-full py-2 text-xs font-semibold text-[#E2E8F0] hover:text-[#FFFFFF] transition-colors cursor-pointer"
             >
-              Sign out &amp; use a different account
+              Sign out &amp; use a different Google account
             </button>
           </form>
         ) : (
           <div className="space-y-4">
-            {/* Google Sign-In */}
+            <div className="bg-[#07090E] border border-white/20 rounded-[2px] p-3.5 space-y-2">
+              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#00ffaa] font-bold">
+                Cloud Profile Perks
+              </div>
+              <ul className="text-xs text-[#E2E8F0] space-y-1 leading-relaxed">
+                <li>• Sync Career Highs, Streaks &amp; Fast-Break Splits across devices</li>
+                <li>• Add PVP Opponents as Friends &amp; send live Rematch invites</li>
+                <li>• Create &amp; compete in Online PVP Leagues</li>
+              </ul>
+            </div>
+
+            {error && (
+              <div className="text-xs font-semibold text-[#FECACA] bg-[#EF4444]/18 border border-[#FECACA]/60 rounded-[2px] px-3 py-2.5 leading-relaxed">
+                {error}
+              </div>
+            )}
+
+            {/* Primary Google Sign-In via same-origin Firebase popup */}
             <button
               type="button"
               disabled={submitting}
-              onClick={handleGoogleSignIn}
-              className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-lg bg-[#F4EFE6] hover:bg-white disabled:opacity-50 text-[#0B0E14] text-sm font-semibold transition-colors cursor-pointer"
+              onClick={() => void handleGoogleSignIn()}
+              className="w-full flex items-center justify-center gap-3 min-h-[48px] py-3 px-4 rounded-[2px] bg-[#FFFFFF] hover:bg-[#E2E8F0] disabled:opacity-65 text-[#05070B] text-sm font-extrabold uppercase tracking-wide transition-colors cursor-pointer shadow-lg"
             >
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   fill="#4285F4"
                   d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
@@ -277,128 +448,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
                 />
               </svg>
-              <span>Continue with Google</span>
+              <span>{submitting ? 'Connecting Google...' : 'Continue with Google'}</span>
             </button>
 
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-white/10" />
-              <span className="text-[11px] text-[#64748B] font-medium">OR EMAIL</span>
-              <div className="h-px flex-1 bg-white/10" />
-            </div>
+            {gisReady && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleGisFallbackSignIn}
+                  className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0] hover:text-[#FFFFFF] underline underline-offset-2 transition-colors cursor-pointer"
+                >
+                  Or try direct Google OAuth sign-in
+                </button>
+              </div>
+            )}
 
-            {/* Sign In / Create Account Tabs */}
-            <div className="grid grid-cols-2 gap-1 p-1 bg-[#0B0E14] border border-white/10 rounded-lg">
+            <div className="pt-2 border-t border-white/20 text-center">
               <button
                 type="button"
-                onClick={() => {
-                  setTab('SIGN_IN');
-                  setError(null);
-                }}
-                className={`py-2 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                  tab === 'SIGN_IN'
-                    ? 'bg-[#1D2432] text-[#F4EFE6]'
-                    : 'text-[#94A3B8] hover:text-[#F4EFE6]'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTab('SIGN_UP');
-                  setError(null);
-                }}
-                className={`py-2 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                  tab === 'SIGN_UP'
-                    ? 'bg-[#1D2432] text-[#F4EFE6]'
-                    : 'text-[#94A3B8] hover:text-[#F4EFE6]'
-                }`}
-              >
-                Create Account
-              </button>
-            </div>
-
-            <form onSubmit={handleEmailSubmit} className="space-y-3">
-              {tab === 'SIGN_UP' && (
-                <div>
-                  <label
-                    htmlFor="auth-username"
-                    className="block text-xs font-medium text-[#CBD5E1] mb-1"
-                  >
-                    PVP Username
-                  </label>
-                  <input
-                    id="auth-username"
-                    type="text"
-                    maxLength={16}
-                    value={username}
-                    onChange={(ev) => setUsername(ev.target.value)}
-                    placeholder="SplashBro_3"
-                    className="w-full px-3.5 py-2.5 rounded-lg bg-[#0B0E14] border border-white/15 text-sm text-[#F4EFE6] placeholder:text-[#64748B] focus:outline-none focus:border-[#F9631C]"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label
-                  htmlFor="auth-email"
-                  className="block text-xs font-medium text-[#CBD5E1] mb-1"
-                >
-                  Email
-                </label>
-                <input
-                  id="auth-email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(ev) => setEmail(ev.target.value)}
-                  placeholder="shooter@court.com"
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#0B0E14] border border-white/15 text-sm text-[#F4EFE6] placeholder:text-[#64748B] focus:outline-none focus:border-[#F9631C]"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="auth-password"
-                  className="block text-xs font-medium text-[#CBD5E1] mb-1"
-                >
-                  Password
-                </label>
-                <input
-                  id="auth-password"
-                  type="password"
-                  autoComplete={tab === 'SIGN_IN' ? 'current-password' : 'new-password'}
-                  value={password}
-                  onChange={(ev) => setPassword(ev.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#0B0E14] border border-white/15 text-sm text-[#F4EFE6] placeholder:text-[#64748B] focus:outline-none focus:border-[#F9631C]"
-                />
-              </div>
-
-              {error && (
-                <div className="text-xs text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/25 rounded-lg px-3 py-2">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
                 disabled={submitting}
-                className="w-full py-3 rounded-lg bg-[#F9631C] hover:bg-[#FB7A3C] disabled:opacity-50 text-[#0B0E14] font-display text-2xl font-extrabold tracking-wide transition-colors cursor-pointer"
-              >
-                {submitting
-                  ? 'Please wait...'
-                  : tab === 'SIGN_IN'
-                    ? 'Sign In'
-                    : 'Create Account'}
-              </button>
-            </form>
-
-            <div className="pt-2 border-t border-white/10 text-center">
-              <button
-                type="button"
                 onClick={onContinueAsGuest}
-                className="text-xs font-medium text-[#94A3B8] hover:text-[#F4EFE6] transition-colors cursor-pointer py-1.5"
+                className="font-mono text-[11px] uppercase tracking-wider font-bold text-[#FFFFFF] hover:text-[#00ffaa] transition-colors cursor-pointer py-2 px-3"
               >
                 Continue as Guest (Solo Practice)
               </button>

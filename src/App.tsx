@@ -1,48 +1,123 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { Clock, Swords, X } from 'lucide-react';
 import { AuthPage } from './components/AuthPage';
+import { CourtLockerModal } from './components/CourtLockerModal';
 import { CrowdReactionOverlay } from './components/CrowdReactionOverlay';
+import { EditUsernameModal } from './components/EditUsernameModal';
+import { FindingOpponentOverlay } from './components/FindingOpponentOverlay';
+import { FriendsModal } from './components/FriendsModal';
 import { GameHud } from './components/GameHud';
 import { GameOverModal } from './components/GameOverModal';
+import { HighlightReplayModal } from './components/HighlightReplayModal';
+import { LeaguesModal } from './components/LeaguesModal';
+import { LoadingChecklist, LoadingScreen } from './components/LoadingScreen';
 import { PauseModal } from './components/PauseModal';
+import { PvpIntroOverlay } from './components/PvpIntroOverlay';
+import { findRivalryForUsername, RivalBadgeIcon } from './components/RivalBadgeIcon';
 import { TitleOverlay } from './components/TitleOverlay';
 import {
+  acceptFriendRequest,
   auth,
+  declineOrRemoveFriendship,
   fetchUserProfile,
+  fetchUserRivalries,
   mergeCareerStats,
+  mergeRivalries,
+  recordLeagueMatchResult,
+  sendFriendRequest,
+  sendFriendRequestByUsername,
+  subscribeToFriendships,
   syncCareerStatsToFirestore,
+  syncCourtRankingToFirestore,
+  syncPvpGlobalRankingToFirestore,
+  syncRivalryToFirestore,
 } from './firebase';
 import { soundEngine } from './game/audio';
 import {
-  BALLS_PER_RACK,
+  BACKBOARD_TOP_Z,
+  BACKBOARD_Y,
+  computeRackCameraRig,
   CONTEST_DURATION_SECONDS,
+  DEFAULT_MONEY_RACK_INDEX,
+  DIFFICULTY_TIERS,
   getDifficultyForStreak,
   getEffectiveDifficulty,
+  getRackBallCount,
+  getSlotIndex,
   HOOP_POS,
+  isMoneyBallSlot,
   METER_PERFECT_CENTER,
+  normalizeMoneyRackIndex,
   RACK_CONFIGS,
   RACKS_COUNT,
+  STAMINA_EXHAUSTED_THRESHOLD,
 } from './game/constants';
+import { isCourtUnlocked } from './game/courts';
+import {
+  setHapticsMuted,
+  triggerBuzzerHaptic,
+  triggerFootstepHaptic,
+  triggerMatchStartHaptic,
+  triggerMissHaptic,
+  triggerPerfectZoneCueHaptic,
+  triggerRackArrivalHaptic,
+  triggerRimHangHaptic,
+  triggerRimHitHaptic,
+  triggerSecondWindHaptic,
+  triggerShotGatherHaptic,
+  triggerShotReleaseHaptic,
+  triggerSwishHaptic,
+} from './game/haptics';
 import { computeShotLaunch, stepBallPhysics } from './game/physics';
 import { CameraRig } from './game/projection';
 import { OpponentShotEvent, pvpClient } from './game/pvpClient';
 import { renderArena, RenderState } from './game/renderer';
-import { loadCareerStats, saveCareerStats } from './game/storage';
+import {
+  loadCameraMode,
+  loadCareerStats,
+  loadGuestName,
+  loadInstantReplayEnabled,
+  loadLastHighlight,
+  loadLastVisitAt,
+  loadRivalries,
+  loadSelectedCourt,
+  LONG_AWAY_THRESHOLD_MS,
+  normalizeOpponentKey,
+  saveCameraMode,
+  saveCareerStats,
+  saveGuestName,
+  saveInstantReplayEnabled,
+  saveLastHighlight,
+  saveLastVisitAt,
+  saveRivalries,
+  saveSelectedCourt,
+} from './game/storage';
 import {
   ActiveBall,
   BallSlotRecord,
+  CameraMode,
   CareerStats,
+  ContestHighlight,
+  CourtThemeId,
   CrowdReactionOverlayData,
+  FastBreakSplit,
   Flashbulb,
   FloatingCallout,
+  FriendPresence,
+  FriendshipRecord,
   GameMode,
   GamePhase,
   HudSnapshot,
-  OpponentGhostState,
+  MatchInvitePayload,
   Particle,
+  PvpLeague,
   PvpLobbyStats,
   PvpMatchSnapshot,
+  RivalryRecord,
+  ShooterAnimState,
+  ShotChartEntry,
   TimingBreakdown,
   TimingQuality,
   UserProfile,
@@ -53,8 +128,9 @@ import {
 function createInitialBallsRecord(moneyRack: number): BallSlotRecord[] {
   const list: BallSlotRecord[] = [];
   for (let r = 0; r < RACKS_COUNT; r++) {
-    for (let b = 0; b < BALLS_PER_RACK; b++) {
-      const isMoney = r === moneyRack || b === BALLS_PER_RACK - 1;
+    const count = getRackBallCount(r);
+    for (let b = 0; b < count; b++) {
+      const isMoney = isMoneyBallSlot(r, b, moneyRack);
       list.push({
         rackIndex: r,
         ballIndex: b,
@@ -74,6 +150,7 @@ interface EngineState {
   score: number;
   bestScore: number;
   career: CareerStats;
+  contestStartCareer: CareerStats;
   contestCountedInCareer: boolean;
   isNewBest: boolean;
   timeLeft: number;
@@ -112,12 +189,25 @@ interface EngineState {
   shooterVelZ: number;
   shooterFacing: { x: number; y: number };
   runPhase: number;
+  runBlend: number;
   runStepTimer: number;
   isMovingToRack: boolean;
+  shooterAnimState: ShooterAnimState;
+  dribbleBlend: number;
   stamina: number;
+  staminaSavedTiming: number;
+  staminaRecoveredMovement: number;
+  staminaMinObserved: number;
+  consecutivePerfectShots: number;
+  secondWindCount: number;
+  secondWindFlashTimer: number;
+  shotChart: ShotChartEntry[];
   gatherBuffered: boolean;
   gatherAmount: number;
   followThroughAmount: number;
+  landingSquat: number;
+  ballPickupTimer: number;
+  sprintDelayTimer: number;
   gatherCooldown: number;
   rackMoveTimer: number;
   isHoldingShot: boolean;
@@ -126,7 +216,9 @@ interface EngineState {
   lastReleaseMeter: number;
   lastReleaseLabel: string | null;
   lastReleaseColor: string;
+  lastTimingQuality: TimingQuality | null;
   hasShotAnyBall: boolean;
+  shooterLabelAlpha: number;
 
   // Heat Check dynamic hoop state
   hoopPos: Vec3;
@@ -141,7 +233,7 @@ interface EngineState {
   // PVP State
   myPlayerId: string | null;
   pvpMatch: PvpMatchSnapshot | null;
-  opponentGhost: OpponentGhostState | null;
+  pvpIntroElapsed: number;
 
   // Camera & VFX
   camera: CameraRig;
@@ -159,6 +251,21 @@ interface EngineState {
   windMph: number;
   windVec: { x: number; y: number };
   windShiftTimer: number;
+  courtTheme: CourtThemeId;
+  shooterDisplayName: string;
+  bestContestHighlight: ContestHighlight | null;
+  lastHighlight: ContestHighlight | null;
+  rivalries: Record<string, RivalryRecord>;
+  fastBreakElapsedMs: number;
+  fastBreakFinishMs: number | null;
+  fastBreakRackCumulativesMs: (number | null)[];
+  fastBreakIsNewBest: boolean;
+  leagueResultRecorded: boolean;
+  instantReplayEnabled: boolean;
+  cameraMode: CameraMode;
+  perfectZoneHapticFired: boolean;
+  sessionBestScore: number;
+  sessionBestStreak: number;
 }
 
 function pickNextHeatCheckHoopTarget(current: Vec3): Vec3 {
@@ -171,6 +278,82 @@ function pickNextHeatCheckHoopTarget(current: Vec3): Vec3 {
     }
   }
   return { x: 0, y: 0, z: HOOP_POS.z };
+}
+
+interface PvpIntroKeyframe {
+  t: number;
+  pos: Vec3;
+  target: Vec3;
+  focal: number;
+}
+
+const PVP_INTRO_KEYFRAMES: PvpIntroKeyframe[] = [
+  { t: 0.0, pos: { x: 25.0, y: 42.0, z: 18.0 }, target: { x: 0, y: 12.0, z: 5.2 }, focal: 0.86 },
+  { t: 0.26, pos: { x: 7.0, y: 44.5, z: 14.0 }, target: { x: 0, y: 10.0, z: 5.4 }, focal: 0.9 },
+  { t: 0.48, pos: { x: 21.5, y: 19.5, z: 6.2 }, target: { x: -1.5, y: 7.5, z: 6.2 }, focal: 0.96 },
+  { t: 0.68, pos: { x: 0.0, y: 29.8, z: 5.6 }, target: { x: 0, y: 2.5, z: 7.2 }, focal: 1.0 },
+  { t: 0.85, pos: { x: -22.5, y: 18.8, z: 6.6 }, target: { x: -3.5, y: 0.5, z: 7.8 }, focal: 1.0 },
+  {
+    t: 1.0,
+    pos: { ...RACK_CONFIGS[0].camPos },
+    target: { ...RACK_CONFIGS[0].camTarget },
+    focal: 1.0,
+  },
+];
+
+function catmullRomScalar(p0: number, p1: number, p2: number, p3: number, u: number): number {
+  const u2 = u * u;
+  const u3 = u2 * u;
+  return (
+    0.5 *
+    (2 * p1 +
+      (-p0 + p2) * u +
+      (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 +
+      (-p0 + 3 * p1 - 3 * p2 + p3) * u3)
+  );
+}
+
+function computePvpIntroCamera(elapsedSec: number): CameraRig {
+  const norm = Math.max(0, Math.min(1, elapsedSec / 15.0));
+  const lastIdx = PVP_INTRO_KEYFRAMES.length - 1;
+  let idx = 0;
+  while (idx < lastIdx - 1 && norm > PVP_INTRO_KEYFRAMES[idx + 1].t) {
+    idx += 1;
+  }
+  const k1 = PVP_INTRO_KEYFRAMES[idx];
+  const k2 = PVP_INTRO_KEYFRAMES[idx + 1];
+  const k0 = PVP_INTRO_KEYFRAMES[Math.max(0, idx - 1)];
+  const k3 = PVP_INTRO_KEYFRAMES[Math.min(lastIdx, idx + 2)];
+  const span = Math.max(0.0001, k2.t - k1.t);
+  const rawU = Math.max(0, Math.min(1, (norm - k1.t) / span));
+  // Smooth final lock-in so camera eases gently into Rack 1 POV
+  const u = idx === lastIdx - 1 ? rawU * rawU * (3 - 2 * rawU) : rawU;
+
+  return {
+    pos: {
+      x: catmullRomScalar(k0.pos.x, k1.pos.x, k2.pos.x, k3.pos.x, u),
+      y: catmullRomScalar(k0.pos.y, k1.pos.y, k2.pos.y, k3.pos.y, u),
+      z: catmullRomScalar(k0.pos.z, k1.pos.z, k2.pos.z, k3.pos.z, u),
+    },
+    target: {
+      x: catmullRomScalar(k0.target.x, k1.target.x, k2.target.x, k3.target.x, u),
+      y: catmullRomScalar(k0.target.y, k1.target.y, k2.target.y, k3.target.y, u),
+      z: catmullRomScalar(k0.target.z, k1.target.z, k2.target.z, k3.target.z, u),
+    },
+    focalLength: catmullRomScalar(k0.focal, k1.focal, k2.focal, k3.focal, u),
+  };
+}
+
+function buildServerProfileStats(career: CareerStats) {
+  const accuracyPct =
+    career.totalShotsAttempted > 0
+      ? Math.round((career.totalShotsMade / career.totalShotsAttempted) * 100)
+      : 0;
+  return {
+    bestScore: career.bestScore,
+    bestStreak: career.allTimeBestStreak,
+    accuracyPct,
+  };
 }
 
 function computeWindState(e: EngineState): WindState {
@@ -210,14 +393,124 @@ function computeWindState(e: EngineState): WindState {
   };
 }
 
+function buildHighlightFromBall(e: EngineState, ball: ActiveBall): ContestHighlight | null {
+  if (
+    ball.isRemote ||
+    !ball.hasScored ||
+    !ball.highlightMeta ||
+    !ball.highlightFrames ||
+    ball.highlightFrames.length < 2 ||
+    !ball.shooterPosAtRelease ||
+    !ball.shooterFacingAtRelease ||
+    !ball.hoopPosAtRelease
+  ) {
+    return null;
+  }
+
+  const meta = ball.highlightMeta;
+  const rackCfg = RACK_CONFIGS[ball.rackIndex];
+  const scoreAtTime = ball.highlightScoreAtTime ?? ball.age;
+  const duration = Math.max(
+    scoreAtTime + 0.35,
+    ball.highlightFrames[ball.highlightFrames.length - 1].t
+  );
+
+  return {
+    id: ball.id,
+    mode: e.mode,
+    courtTheme: e.courtTheme,
+    rackIndex: ball.rackIndex,
+    rackLabel: rackCfg?.label ?? `Rack ${ball.rackIndex + 1}`,
+    ballIndex: ball.ballIndex,
+    isMoney: ball.isMoney,
+    isSwish: meta.isCleanSwish,
+    isBuzzerBeater: ball.isBuzzerBeater,
+    hadRimHang: Boolean(ball.hadRimHang),
+    timingQuality: ball.timingQualityAtRelease ?? 'GOOD',
+    pointsAwarded: meta.pointsAwarded,
+    multiplier: meta.multiplier,
+    streakAtMake: meta.streakAtMake,
+    windMph: ball.windMphAtRelease ?? 0,
+    shooterName: e.shooterDisplayName,
+    shooterPos: { ...ball.shooterPosAtRelease },
+    shooterFacing: { ...ball.shooterFacingAtRelease },
+    hoopPos: { ...ball.hoopPosAtRelease },
+    frames: ball.highlightFrames.map((f) => ({ ...f })),
+    rimHitsAt: [...(ball.rimHitTimes ?? [])],
+    scoreAtTime,
+    duration,
+    priorityScore: meta.priorityScore,
+    recordedAt: Date.now(),
+  };
+}
+
+function tryCommitBallHighlight(e: EngineState, ball: ActiveBall): void {
+  if (ball.highlightSaved || e.mode === 'PRACTICE') return;
+  const hl = buildHighlightFromBall(e, ball);
+  if (!hl) return;
+  ball.highlightSaved = true;
+  if (!e.bestContestHighlight || hl.priorityScore >= e.bestContestHighlight.priorityScore) {
+    e.bestContestHighlight = hl;
+  }
+}
+
+function finalizeContestHighlights(e: EngineState): void {
+  for (const ball of e.activeBalls) {
+    tryCommitBallHighlight(e, ball);
+  }
+  if (e.bestContestHighlight) {
+    e.lastHighlight = e.bestContestHighlight;
+    saveLastHighlight(e.bestContestHighlight);
+  }
+}
+
 function buildHudSnapshot(e: EngineState): HudSnapshot {
-  const difficulty = getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina);
+  const difficulty =
+    e.mode === 'PRACTICE'
+      ? DIFFICULTY_TIERS[0]
+      : getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina);
+  const timingRatio =
+    e.attemptsCount > 0
+      ? Math.min(1, e.staminaSavedTiming / (e.attemptsCount * 2.3))
+      : 0;
+  const movementRatio = Math.min(
+    1,
+    (e.stamina * 0.6 +
+      Math.min(60, e.staminaRecoveredMovement) * 0.55 +
+      (e.staminaMinObserved >= 20 ? 12 : 0)) /
+      92
+  );
+  const rawEff =
+    e.attemptsCount > 0
+      ? (timingRatio * 0.52 + movementRatio * 0.48) * 100
+      : movementRatio * 100;
+  const efficiencyPct = Math.max(0, Math.min(100, Math.round(rawEff)));
+  const rating: HudSnapshot['staminaEfficiency']['rating'] =
+    efficiencyPct >= 82
+      ? 'Elite'
+      : efficiencyPct >= 62
+        ? 'Sharp'
+        : efficiencyPct >= 40
+          ? 'Steady'
+          : 'Winded';
+
   return {
     mode: e.mode,
     phase: e.phase,
     score: e.score,
     bestScore: e.bestScore,
     career: { ...e.career },
+    careerBaseline: {
+      contestsPlayed: e.contestStartCareer.contestsPlayed,
+      totalCareerScore: e.contestStartCareer.totalCareerScore,
+      totalSwishes: e.contestStartCareer.totalSwishes,
+      totalSwishTrackedAttempts: e.contestStartCareer.totalSwishTrackedAttempts,
+      totalBestStreakSum: e.contestStartCareer.totalBestStreakSum,
+      streakTrackedContests: e.contestStartCareer.streakTrackedContests,
+      allTimeBestStreak: e.contestStartCareer.allTimeBestStreak,
+      bestScore: e.contestStartCareer.bestScore,
+      bestFastBreakMs: e.contestStartCareer.bestFastBreakMs,
+    },
     timeLeft: Math.max(0, e.timeLeft),
     countdownValue:
       e.mode === 'PVP' && e.pvpMatch ? e.pvpMatch.countdownLeft : Math.ceil(e.countdownTimer),
@@ -238,6 +531,8 @@ function buildHudSnapshot(e: EngineState): HudSnapshot {
     isNewBest: e.isNewBest,
     muted: soundEngine.isMuted(),
     lastFeedback: e.lastReleaseLabel,
+    lastReleaseMeter: e.lastReleaseMeter,
+    lastTimingQuality: e.lastTimingQuality,
     activeBallsInAir: e.activeBalls.filter((b) => !b.isRemote && !b.hasResolved).length,
     pvpMatch: e.pvpMatch,
     myPlayerId: e.myPlayerId,
@@ -246,22 +541,134 @@ function buildHudSnapshot(e: EngineState): HudSnapshot {
     hoopPos: { ...e.hoopPos },
     heatCheckShiftIn: e.mode === 'HEAT_CHECK' ? Math.max(0, e.heatCheckShiftTimer) : 0,
     isMovingToRack: e.isMovingToRack,
+    shooterAnimState: e.shooterAnimState,
     stamina: Math.round(e.stamina),
+    consecutivePerfectShots: e.consecutivePerfectShots,
+    secondWindCount: e.secondWindCount,
+    secondWindActive: e.secondWindFlashTimer > 0,
+    shotChart: e.shotChart.map((s) => ({ ...s })),
+    staminaEfficiency: {
+      efficiencyPct,
+      totalSaved: Math.round(e.staminaSavedTiming + e.staminaRecoveredMovement),
+      timingSaved: Math.round(e.staminaSavedTiming),
+      movementRecovered: Math.round(e.staminaRecoveredMovement),
+      endStamina: Math.round(e.stamina),
+      minStamina: Math.round(e.staminaMinObserved),
+      rating,
+    },
+    courtTheme: e.courtTheme,
+    contestHighlight: e.bestContestHighlight,
+    lastHighlight: e.lastHighlight,
+    rivalries: Object.values(e.rivalries).sort((a, b) => b.lastPlayedAt - a.lastPlayedAt),
+    fastBreakElapsedMs: e.fastBreakElapsedMs,
+    fastBreakFinishMs: e.fastBreakFinishMs,
+    fastBreakSplits: RACK_CONFIGS.map((rack, i): FastBreakSplit => {
+      const cum = e.fastBreakRackCumulativesMs[i] ?? null;
+      const prevCum = i > 0 ? (e.fastBreakRackCumulativesMs[i - 1] ?? null) : 0;
+      const lapMs =
+        cum !== null && (i === 0 || prevCum !== null)
+          ? Math.max(0, cum - (i === 0 ? 0 : (prevCum ?? 0)))
+          : null;
+      const baselineCum = e.contestStartCareer.bestFastBreakSplitsMs[i] ?? 0;
+      const deltaMs = cum !== null && baselineCum > 0 ? cum - baselineCum : null;
+      return {
+        rackIndex: rack.id,
+        shortLabel: rack.shortLabel,
+        lapMs,
+        cumulativeMs: cum,
+        deltaMs,
+      };
+    }),
+    fastBreakIsNewBest: e.fastBreakIsNewBest,
+    instantReplayEnabled: e.instantReplayEnabled,
+    instantReplayActive: false,
+    instantReplayHeadline: null,
+    instantReplayPoints: 0,
+    cameraMode: e.cameraMode,
   };
 }
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const activeShotPointerIdRef = useRef<number | null>(null);
   const initialCareer = useRef<CareerStats>(loadCareerStats());
+  const initialRivalries = useRef<Record<string, RivalryRecord>>(loadRivalries());
+  const initialHighlight = useRef<ContestHighlight | null>(loadLastHighlight());
+  const initialCourt = useRef<CourtThemeId>(
+    (() => {
+      const saved = loadSelectedCourt();
+      return isCourtUnlocked(saved, initialCareer.current) ? saved : 'wooden_gym';
+    })()
+  );
 
+  const initialGuestName = useRef<string>(loadGuestName());
+  const initialInstantReplay = useRef<boolean>(loadInstantReplayEnabled());
+  const initialCameraMode = useRef<CameraMode>(loadCameraMode());
+  const initialVisitReasonRef = useRef<'FIRST_VISIT' | 'LONG_AWAY' | null>(
+    (() => {
+      const last = loadLastVisitAt();
+      if (last === null) return 'FIRST_VISIT';
+      if (Date.now() - last >= LONG_AWAY_THRESHOLD_MS) return 'LONG_AWAY';
+      return null;
+    })()
+  );
+  const [loadingState, setLoadingState] = useState<{
+    visible: boolean;
+    reason: 'FIRST_VISIT' | 'LONG_AWAY';
+  }>(() => ({
+    visible: initialVisitReasonRef.current !== null,
+    reason: initialVisitReasonRef.current ?? 'FIRST_VISIT',
+  }));
+  const [loadingRunId, setLoadingRunId] = useState<number>(() =>
+    initialVisitReasonRef.current !== null ? 1 : 0
+  );
+  const [loadingChecklist, setLoadingChecklist] = useState<LoadingChecklist>({
+    fontsReady: false,
+    arenaReady: false,
+    accountReady: false,
+    lobbyReady: false,
+  });
+  const loadingVisibleRef = useRef(loadingState.visible);
+  const arenaRenderedFramesRef = useRef(0);
+  const arenaReadyMarkedRef = useRef(false);
+  const hiddenSinceRef = useRef<number | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [playerName, setPlayerName] = useState('Shooter');
-  const playerNameRef = useRef('Shooter');
+  const wsConnectedRef = useRef(false);
+  const [playerName, setPlayerName] = useState(initialGuestName.current);
+  const playerNameRef = useRef(initialGuestName.current);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const userProfileRef = useRef<UserProfile | null>(null);
+  const [profileSyncing, setProfileSyncing] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
   const showAuthOverlayRef = useRef(false);
+  const [showEditUsername, setShowEditUsername] = useState(false);
+  const showEditUsernameRef = useRef(false);
+  const [showCourtLocker, setShowCourtLocker] = useState(false);
+  const showCourtLockerRef = useRef(false);
+  const [showLeaguesModal, setShowLeaguesModal] = useState(false);
+  const showLeaguesModalRef = useRef(false);
+  const [showFriendsModal, setShowFriendsModal] = useState(false);
+  const showFriendsModalRef = useRef(false);
+  const [friendships, setFriendships] = useState<FriendshipRecord[]>([]);
+  const [friendStatuses, setFriendStatuses] = useState<Record<string, FriendPresence>>({});
+  const [incomingInvite, setIncomingInvite] = useState<MatchInvitePayload | null>(null);
+  const [outgoingInvite, setOutgoingInvite] = useState<MatchInvitePayload | null>(null);
+  const [inviteNotice, setInviteNotice] = useState<{
+    id: number;
+    text: string;
+    tone: 'ok' | 'err';
+  } | null>(null);
+  const [inviteCountdownMs, setInviteCountdownMs] = useState<number>(0);
+  const [activeLeague, setActiveLeague] = useState<PvpLeague | null>(null);
+  const [queuedLeagueInfo, setQueuedLeagueInfo] = useState<{
+    leagueId: string | null;
+    leagueName: string | null;
+  }>({ leagueId: null, leagueName: null });
+  const [activeHighlight, setActiveHighlight] = useState<ContestHighlight | null>(null);
+  const activeHighlightRef = useRef<ContestHighlight | null>(null);
+  const [courtRankingsRefreshNonce, setCourtRankingsRefreshNonce] = useState(0);
   const initialAuthCheckDoneRef = useRef(false);
   const [lobbyStats, setLobbyStats] = useState<PvpLobbyStats>({
     onlinePlayers: 1,
@@ -272,16 +679,67 @@ export default function App() {
   const [pvpError, setPvpError] = useState<string | null>(null);
 
   useEffect(() => {
+    loadingVisibleRef.current = loadingState.visible;
+  }, [loadingState.visible]);
+
+  useEffect(() => {
+    wsConnectedRef.current = wsConnected;
+  }, [wsConnected]);
+
+  useEffect(() => {
     playerNameRef.current = playerName;
+    engineRef.current.shooterDisplayName = userProfileRef.current
+      ? `@${userProfileRef.current.username}`
+      : playerName;
   }, [playerName]);
 
   useEffect(() => {
     userProfileRef.current = userProfile;
+    engineRef.current.shooterDisplayName = userProfile
+      ? `@${userProfile.username}`
+      : playerNameRef.current;
   }, [userProfile]);
 
   useEffect(() => {
     showAuthOverlayRef.current = showAuthOverlay;
   }, [showAuthOverlay]);
+
+  useEffect(() => {
+    showEditUsernameRef.current = showEditUsername;
+  }, [showEditUsername]);
+
+  useEffect(() => {
+    showCourtLockerRef.current = showCourtLocker;
+  }, [showCourtLocker]);
+
+  useEffect(() => {
+    showLeaguesModalRef.current = showLeaguesModal;
+  }, [showLeaguesModal]);
+
+  useEffect(() => {
+    showFriendsModalRef.current = showFriendsModal;
+  }, [showFriendsModal]);
+
+  useEffect(() => {
+    activeHighlightRef.current = activeHighlight;
+  }, [activeHighlight]);
+
+  useEffect(() => {
+    soundEngine.setCourtTheme(initialCourt.current);
+    setHapticsMuted(soundEngine.isMuted());
+  }, []);
+
+  useEffect(() => {
+    const recordVisitExit = () => {
+      saveLastVisitAt(Date.now());
+    };
+    window.addEventListener('pagehide', recordVisitExit);
+    window.addEventListener('beforeunload', recordVisitExit);
+    return () => {
+      window.removeEventListener('pagehide', recordVisitExit);
+      window.removeEventListener('beforeunload', recordVisitExit);
+    };
+  }, []);
 
   const engineRef = useRef<EngineState>({
     mode: 'SOLO',
@@ -289,6 +747,7 @@ export default function App() {
     score: 0,
     bestScore: initialCareer.current.bestScore,
     career: { ...initialCareer.current },
+    contestStartCareer: { ...initialCareer.current },
     contestCountedInCareer: false,
     isNewBest: false,
     timeLeft: CONTEST_DURATION_SECONDS,
@@ -296,7 +755,7 @@ export default function App() {
     countdownTimer: 0,
     currentRack: 0,
     currentBall: 0,
-    moneyRack: 4,
+    moneyRack: DEFAULT_MONEY_RACK_INDEX,
     streak: 0,
     bestStreak: 0,
     multiplier: 1,
@@ -305,8 +764,8 @@ export default function App() {
     resolvedLocalCount: 0,
     swishCount: 0,
     moneyMadeCount: 0,
-    moneyTotalCount: 9,
-    ballsRecord: createInitialBallsRecord(4),
+    moneyTotalCount: 10,
+    ballsRecord: createInitialBallsRecord(DEFAULT_MONEY_RACK_INDEX),
     timingBreakdown: { perfect: 0, good: 0, early: 0, late: 0 },
     activeBalls: [],
     particles: [],
@@ -326,12 +785,25 @@ export default function App() {
     shooterVelZ: 0,
     shooterFacing: { x: 0, y: -1 },
     runPhase: 0,
+    runBlend: 0,
     runStepTimer: 0,
     isMovingToRack: false,
+    shooterAnimState: 'DRIBBLING',
+    dribbleBlend: 1,
     stamina: 100,
+    staminaSavedTiming: 0,
+    staminaRecoveredMovement: 0,
+    staminaMinObserved: 100,
+    consecutivePerfectShots: 0,
+    secondWindCount: 0,
+    secondWindFlashTimer: 0,
+    shotChart: [],
     gatherBuffered: false,
     gatherAmount: 0,
     followThroughAmount: 0,
+    landingSquat: 0,
+    ballPickupTimer: 0,
+    sprintDelayTimer: 0,
     gatherCooldown: 0,
     rackMoveTimer: 0,
     isHoldingShot: false,
@@ -339,8 +811,10 @@ export default function App() {
     meterFeedbackTimer: 0,
     lastReleaseMeter: 0,
     lastReleaseLabel: null,
-    lastReleaseColor: '#F4EFE6',
+    lastReleaseColor: '#FFFFFF',
+    lastTimingQuality: null,
     hasShotAnyBall: false,
+    shooterLabelAlpha: 1,
 
     hoopPos: { ...HOOP_POS },
     hoopTargetPos: { ...HOOP_POS },
@@ -352,7 +826,7 @@ export default function App() {
 
     myPlayerId: null,
     pvpMatch: null,
-    opponentGhost: null,
+    pvpIntroElapsed: 0,
 
     camera: {
       pos: { ...RACK_CONFIGS[2].camPos },
@@ -372,6 +846,21 @@ export default function App() {
     windMph: 0.45,
     windVec: { x: 0.018, y: 0.004 },
     windShiftTimer: 6.0,
+    courtTheme: initialCourt.current,
+    shooterDisplayName: initialGuestName.current,
+    bestContestHighlight: null,
+    lastHighlight: initialHighlight.current,
+    rivalries: { ...initialRivalries.current },
+    fastBreakElapsedMs: 0,
+    fastBreakFinishMs: null,
+    fastBreakRackCumulativesMs: new Array(RACKS_COUNT).fill(null),
+    fastBreakIsNewBest: false,
+    leagueResultRecorded: false,
+    instantReplayEnabled: initialInstantReplay.current,
+    cameraMode: initialCameraMode.current,
+    perfectZoneHapticFired: false,
+    sessionBestScore: 0,
+    sessionBestStreak: 0,
   });
 
   const [hud, setHud] = useState<HudSnapshot>(() => buildHudSnapshot(engineRef.current));
@@ -387,7 +876,11 @@ export default function App() {
             ? 'ACTIVE'
             : 'TITLE';
     const timeUrgency =
-      e.phase === 'PLAYING' && e.mode !== 'HEAT_CHECK' && e.timeLeft <= 12
+      e.phase === 'PLAYING' &&
+      e.mode !== 'HEAT_CHECK' &&
+      e.mode !== 'PRACTICE' &&
+      e.mode !== 'FAST_BREAK' &&
+      e.timeLeft <= 12
         ? ((12 - e.timeLeft) / 12) * 0.45
         : 0;
     const streakBoost = Math.min(0.7, e.streak * 0.1);
@@ -415,11 +908,21 @@ export default function App() {
         totalCareerScore: profile.totalCareerScore,
         allTimeBestStreak: profile.allTimeBestStreak,
         contestsPlayed: profile.contestsPlayed,
+        totalSwishes: profile.totalSwishes,
+        totalSwishTrackedAttempts: profile.totalSwishTrackedAttempts,
+        totalBestStreakSum: profile.totalBestStreakSum,
+        streakTrackedContests: profile.streakTrackedContests,
         pvpWins: profile.pvpWins,
         pvpLosses: profile.pvpLosses,
         pvpDraws: profile.pvpDraws,
+        bestFastBreakMs: profile.bestFastBreakMs ?? 0,
+        bestFastBreakSplitsMs: profile.bestFastBreakSplitsMs ?? [0, 0, 0, 0, 0],
+        fastBreakContests: profile.fastBreakContests ?? 0,
       });
       e.career = merged;
+      if (e.phase === 'TITLE') {
+        e.contestStartCareer = { ...merged };
+      }
       e.bestScore = merged.bestScore;
       e.streakRecordBaseline = Math.max(2, merged.allTimeBestStreak);
       e.recordBrokenThisRun = false;
@@ -433,11 +936,22 @@ export default function App() {
       userProfileRef.current = updatedProfile;
       setPlayerName(profile.username);
       playerNameRef.current = profile.username;
-      pvpClient.setProfile(profile.username, e.moneyRack, {
-        wins: merged.pvpWins,
-        losses: merged.pvpLosses,
-        draws: merged.pvpDraws,
-      });
+      pvpClient.setProfile(
+        profile.username,
+        e.moneyRack,
+        {
+          wins: merged.pvpWins,
+          losses: merged.pvpLosses,
+          draws: merged.pvpDraws,
+        },
+        profile.uid,
+        buildServerProfileStats(merged)
+      );
+
+      const remoteSplits = profile.bestFastBreakSplitsMs ?? [0, 0, 0, 0, 0];
+      const splitsChanged = merged.bestFastBreakSplitsMs.some(
+        (val, idx) => val !== (remoteSplits[idx] ?? 0)
+      );
 
       if (
         merged.bestScore !== profile.bestScore ||
@@ -446,15 +960,47 @@ export default function App() {
         merged.totalCareerScore !== profile.totalCareerScore ||
         merged.allTimeBestStreak !== profile.allTimeBestStreak ||
         merged.contestsPlayed !== profile.contestsPlayed ||
+        merged.totalSwishes !== profile.totalSwishes ||
+        merged.totalSwishTrackedAttempts !== profile.totalSwishTrackedAttempts ||
+        merged.totalBestStreakSum !== profile.totalBestStreakSum ||
+        merged.streakTrackedContests !== profile.streakTrackedContests ||
         merged.pvpWins !== profile.pvpWins ||
         merged.pvpLosses !== profile.pvpLosses ||
-        merged.pvpDraws !== profile.pvpDraws
+        merged.pvpDraws !== profile.pvpDraws ||
+        merged.bestFastBreakMs !== (profile.bestFastBreakMs ?? 0) ||
+        merged.fastBreakContests !== (profile.fastBreakContests ?? 0) ||
+        splitsChanged
       ) {
         void syncCareerStatsToFirestore(profile.uid, merged).catch((err: unknown) => {
           console.error('Failed to merge career stats to cloud:', err);
         });
       }
 
+      void fetchUserRivalries(profile.uid)
+        .then((remoteRivalries) => {
+          const mergedRivalries = mergeRivalries(e.rivalries, remoteRivalries);
+          e.rivalries = mergedRivalries;
+          saveRivalries(mergedRivalries);
+
+          for (const [key, localRec] of Object.entries(mergedRivalries)) {
+            const remoteRec = remoteRivalries[key];
+            const localTotal = localRec.wins + localRec.losses + localRec.draws;
+            const remoteTotal = remoteRec
+              ? remoteRec.wins + remoteRec.losses + remoteRec.draws
+              : 0;
+            if (!remoteRec || localTotal > remoteTotal || localRec.lastPlayedAt > remoteRec.lastPlayedAt) {
+              void syncRivalryToFirestore(profile.uid, localRec).catch((err: unknown) => {
+                console.error('Failed to merge rivalry to cloud:', err);
+              });
+            }
+          }
+          syncHud();
+        })
+        .catch((err: unknown) => {
+          console.error('Failed to load PVP rivalries:', err);
+        });
+
+      setProfileLoadError(null);
       setShowAuthOverlay(false);
       syncHud();
     },
@@ -463,6 +1009,8 @@ export default function App() {
 
   const syncUserProfileFromAuth = useCallback(
     async (user: User) => {
+      setProfileSyncing(true);
+      setProfileLoadError(null);
       try {
         const profile = await fetchUserProfile(user.uid);
         if (profile && profile.username) {
@@ -474,7 +1022,28 @@ export default function App() {
         }
       } catch (err) {
         console.error('Error loading user profile:', err);
+        let readable = 'Could not reach Firestore to load your shooter profile. Check your connection and retry.';
+        const rawMsg = err instanceof Error ? err.message : String(err);
+        try {
+          const parsed = JSON.parse(rawMsg) as { error?: string };
+          if (parsed && typeof parsed.error === 'string') {
+            if (parsed.error.includes('Quota exceeded')) {
+              readable = 'Daily Firestore quota exceeded. Quota resets tomorrow.';
+            } else if (parsed.error.includes('client is offline')) {
+              readable = 'Firestore appears offline. Check your connection or VPN/Brave Shields and retry.';
+            } else {
+              readable = `Could not load profile: ${parsed.error}`;
+            }
+          }
+        } catch {
+          if (rawMsg) readable = rawMsg;
+        }
+        setUserProfile(null);
+        userProfileRef.current = null;
+        setProfileLoadError(readable);
         setShowAuthOverlay(true);
+      } finally {
+        setProfileSyncing(false);
       }
     },
     [applyAuthenticatedProfile]
@@ -489,19 +1058,89 @@ export default function App() {
       await signOut(auth);
       setUserProfile(null);
       userProfileRef.current = null;
-      setPlayerName('Shooter');
-      playerNameRef.current = 'Shooter';
+      setProfileLoadError(null);
+      setProfileSyncing(false);
+      setActiveLeague(null);
+      const guest = loadGuestName();
+      setPlayerName(guest);
+      playerNameRef.current = guest;
+      engineRef.current.shooterDisplayName = guest;
       const c = engineRef.current.career;
-      pvpClient.setProfile('Shooter', engineRef.current.moneyRack, {
-        wins: c.pvpWins,
-        losses: c.pvpLosses,
-        draws: c.pvpDraws,
-      });
+      pvpClient.setProfile(
+        guest,
+        engineRef.current.moneyRack,
+        {
+          wins: c.pvpWins,
+          losses: c.pvpLosses,
+          draws: c.pvpDraws,
+        },
+        null,
+        buildServerProfileStats(c)
+      );
+      setFriendships([]);
+      setFriendStatuses({});
+      setIncomingInvite(null);
+      setOutgoingInvite(null);
       syncHud();
     } catch (err) {
       console.error('Failed to sign out:', err);
     }
   }, [syncHud]);
+
+  // Subscribe to persistent Firestore friendships while authenticated
+  useEffect(() => {
+    if (!userProfile?.uid) {
+      setFriendships([]);
+      setFriendStatuses({});
+      return;
+    }
+    const unsub = subscribeToFriendships(
+      userProfile.uid,
+      (list) => {
+        setFriendships(list);
+      },
+      (err) => {
+        console.error('Friendships subscription error:', err);
+      }
+    );
+    return () => unsub();
+  }, [userProfile?.uid]);
+
+  // Sync live friend presence watches over WebSocket
+  useEffect(() => {
+    if (!wsConnected) return;
+    if (!userProfile?.uid) {
+      pvpClient.watchFriends([]);
+      return;
+    }
+    const acceptedUids = friendships
+      .filter((f) => f.status === 'ACCEPTED')
+      .map((f) => f.friendUid);
+    pvpClient.watchFriends(acceptedUids);
+  }, [wsConnected, userProfile?.uid, friendships]);
+
+  // Live countdown ticker for incoming or outgoing match requests
+  useEffect(() => {
+    const active = incomingInvite ?? outgoingInvite;
+    if (!active) {
+      setInviteCountdownMs(0);
+      return;
+    }
+    const update = () => {
+      setInviteCountdownMs(Math.max(0, active.expiresAtMs - Date.now()));
+    };
+    update();
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [incomingInvite, outgoingInvite]);
+
+  const showTimedInviteNotice = useCallback((text: string, tone: 'ok' | 'err' = 'ok') => {
+    const id = Date.now();
+    setInviteNotice({ id, text, tone });
+    window.setTimeout(() => {
+      setInviteNotice((prev) => (prev && prev.id === id ? null : prev));
+    }, 4200);
+  }, []);
 
   // Firebase Auth listener
   useEffect(() => {
@@ -510,19 +1149,86 @@ export default function App() {
       if (!user) {
         setUserProfile(null);
         userProfileRef.current = null;
+        setProfileLoadError(null);
+        setProfileSyncing(false);
         if (!initialAuthCheckDoneRef.current) {
           setShowAuthOverlay(true);
         }
         initialAuthCheckDoneRef.current = true;
+        setLoadingChecklist((prev) => (prev.accountReady ? prev : { ...prev, accountReady: true }));
         return;
       }
 
-      await syncUserProfileFromAuth(user);
-      initialAuthCheckDoneRef.current = true;
+      try {
+        await syncUserProfileFromAuth(user);
+      } finally {
+        initialAuthCheckDoneRef.current = true;
+        setLoadingChecklist((prev) => (prev.accountReady ? prev : { ...prev, accountReady: true }));
+      }
     });
 
     return () => unsubscribe();
   }, [syncUserProfileFromAuth]);
+
+  // Verify real readiness milestones whenever LoadingScreen is active
+  useEffect(() => {
+    if (loadingRunId === 0) {
+      saveLastVisitAt(Date.now());
+      return;
+    }
+
+    let cancelled = false;
+
+    const markFontsReady = () => {
+      if (cancelled) return;
+      setLoadingChecklist((prev) => (prev.fontsReady ? prev : { ...prev, fontsReady: true }));
+    };
+
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      void document.fonts.ready.then(markFontsReady).catch(markFontsReady);
+    } else {
+      markFontsReady();
+    }
+
+    const fontsFallback = window.setTimeout(markFontsReady, 1800);
+
+    const lobbyFallback = window.setTimeout(() => {
+      if (cancelled) return;
+      setLoadingChecklist((prev) => (prev.lobbyReady ? prev : { ...prev, lobbyReady: true }));
+    }, 1300);
+
+    if (wsConnectedRef.current) {
+      setLoadingChecklist((prev) => (prev.lobbyReady ? prev : { ...prev, lobbyReady: true }));
+    }
+
+    if (loadingRunId > 1) {
+      if (auth.currentUser) {
+        void syncUserProfileFromAuth(auth.currentUser).finally(() => {
+          if (cancelled) return;
+          setLoadingChecklist((prev) => (prev.accountReady ? prev : { ...prev, accountReady: true }));
+        });
+      } else {
+        setLoadingChecklist((prev) => (prev.accountReady ? prev : { ...prev, accountReady: true }));
+      }
+    }
+
+    const accountFallback = window.setTimeout(() => {
+      if (cancelled) return;
+      setLoadingChecklist((prev) => (prev.accountReady ? prev : { ...prev, accountReady: true }));
+    }, 2600);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(fontsFallback);
+      window.clearTimeout(lobbyFallback);
+      window.clearTimeout(accountFallback);
+    };
+  }, [loadingRunId, syncUserProfileFromAuth]);
+
+  const handleLoadingComplete = useCallback(() => {
+    saveLastVisitAt(Date.now());
+    setLoadingState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+  }, []);
 
   const resetCourtForMatch = (e: EngineState, mode: GameMode) => {
     const balls = createInitialBallsRecord(e.moneyRack);
@@ -531,9 +1237,13 @@ export default function App() {
     e.mode = mode;
     e.phase = 'COUNTDOWN';
     e.score = 0;
+    e.contestStartCareer = { ...e.career };
     e.contestCountedInCareer = false;
     e.isNewBest = false;
-    e.timeLeft = mode === 'HEAT_CHECK' ? 0 : CONTEST_DURATION_SECONDS;
+    e.timeLeft =
+      mode === 'HEAT_CHECK' || mode === 'PRACTICE' || mode === 'FAST_BREAK'
+        ? 0
+        : CONTEST_DURATION_SECONDS;
     e.lastTickSecond = 6;
     e.countdownTimer = 1.65;
     e.currentRack = 0;
@@ -569,25 +1279,56 @@ export default function App() {
     e.shooterVelZ = 0;
     e.shooterFacing = { x: -r0.x / fLen, y: -r0.y / fLen };
     e.runPhase = 0;
+    e.runBlend = 0;
     e.runStepTimer = 0;
     e.isMovingToRack = false;
+    e.shooterAnimState = 'DRIBBLING';
+    e.dribbleBlend = 1;
     e.stamina = 100;
+    e.staminaSavedTiming = 0;
+    e.staminaRecoveredMovement = 0;
+    e.staminaMinObserved = 100;
+    e.consecutivePerfectShots = 0;
+    e.secondWindCount = 0;
+    e.secondWindFlashTimer = 0;
+    e.shotChart = [];
     e.gatherBuffered = false;
     e.gatherAmount = 0;
     e.followThroughAmount = 0;
+    e.landingSquat = 0;
+    e.ballPickupTimer = 0;
+    e.sprintDelayTimer = 0;
     e.gatherCooldown = 0;
     e.rackMoveTimer = 0;
     e.isHoldingShot = false;
     e.meterValue = 0;
     e.meterFeedbackTimer = 0;
     e.lastReleaseLabel = null;
+    e.lastTimingQuality = null;
     e.hasShotAnyBall = false;
+    e.shooterLabelAlpha = 1;
     e.contestShootingClosed = false;
     e.finishGraceTimer = 0;
+    e.bestContestHighlight = null;
+    e.fastBreakElapsedMs = 0;
+    e.fastBreakFinishMs = null;
+    e.fastBreakRackCumulativesMs = new Array(RACKS_COUNT).fill(null);
+    e.fastBreakIsNewBest = false;
+    e.leagueResultRecorded = false;
+    e.perfectZoneHapticFired = false;
 
-    e.camera.pos = { ...RACK_CONFIGS[0].camPos };
-    e.camera.target = { ...RACK_CONFIGS[0].camTarget };
-    e.camera.focalLength = 1.0;
+    e.pvpIntroElapsed = 0;
+    if (mode === 'PVP') {
+      const introCam = computePvpIntroCamera(0);
+      e.camera.pos = { ...introCam.pos };
+      e.camera.target = { ...introCam.target };
+      e.camera.focalLength = introCam.focalLength;
+    } else {
+      const initRig = computeRackCameraRig(RACK_CONFIGS[0], e.cameraMode);
+      e.camera.pos = { ...initRig.pos };
+      e.camera.target = { ...initRig.target };
+      e.camera.focalLength = initRig.focalLength;
+    }
     e.cameraSnapZoom = 0;
     e.netWhip = 0;
     e.rimShake = 0;
@@ -596,11 +1337,14 @@ export default function App() {
     const initAngle = Math.random() * Math.PI * 2;
     e.windAngle = initAngle;
     e.windTargetAngle = initAngle;
-    e.windMph = 0.45;
-    e.windVec = {
-      x: Math.cos(initAngle) * 0.45 * 0.044,
-      y: Math.sin(initAngle) * 0.45 * 0.044,
-    };
+    e.windMph = mode === 'PRACTICE' ? 0 : 0.45;
+    e.windVec =
+      mode === 'PRACTICE'
+        ? { x: 0, y: 0 }
+        : {
+            x: Math.cos(initAngle) * 0.45 * 0.044,
+            y: Math.sin(initAngle) * 0.45 * 0.044,
+          };
     e.windShiftTimer = 6.5;
   };
 
@@ -694,7 +1438,8 @@ export default function App() {
     text: string,
     color: string,
     worldPos: Vec3,
-    subText?: string
+    subText?: string,
+    behindBackboard = false
   ) => {
     e.callouts.push({
       id: e.nextCalloutId++,
@@ -704,6 +1449,7 @@ export default function App() {
       worldPos: { ...worldPos },
       life: 1.15,
       maxLife: 1.15,
+      behindBackboard,
     });
   };
 
@@ -858,16 +1604,24 @@ export default function App() {
       onConnected: (conn) => {
         setWsConnected(conn);
         if (conn) {
+          setLoadingChecklist((prev) => (prev.lobbyReady ? prev : { ...prev, lobbyReady: true }));
           const e = engineRef.current;
-          pvpClient.setProfile(playerNameRef.current, e.moneyRack, {
-            wins: e.career.pvpWins,
-            losses: e.career.pvpLosses,
-            draws: e.career.pvpDraws,
-          });
+          pvpClient.setProfile(
+            userProfileRef.current ? userProfileRef.current.username : playerNameRef.current,
+            e.moneyRack,
+            {
+              wins: e.career.pvpWins,
+              losses: e.career.pvpLosses,
+              draws: e.career.pvpDraws,
+            },
+            userProfileRef.current?.uid ?? null,
+            buildServerProfileStats(e.career)
+          );
         }
       },
       onWelcome: (id, assignedName) => {
         engineRef.current.myPlayerId = id;
+        setLoadingChecklist((prev) => (prev.lobbyReady ? prev : { ...prev, lobbyReady: true }));
         if (!userProfileRef.current && playerNameRef.current === 'Shooter') {
           setPlayerName(assignedName);
         }
@@ -876,17 +1630,47 @@ export default function App() {
       onLobbyStats: (stats) => {
         setLobbyStats(stats);
       },
-      onQueueStatus: (queued) => {
+      onQueueStatus: (queued, leagueId, leagueName) => {
         setInQueue(queued);
+        setQueuedLeagueInfo({
+          leagueId: leagueId ?? null,
+          leagueName: leagueName ?? null,
+        });
+      },
+      onFriendStatuses: (statuses) => {
+        setFriendStatuses(statuses);
+      },
+      onMatchInviteSent: (invite) => {
+        setOutgoingInvite(invite);
+      },
+      onMatchInviteReceived: (invite) => {
+        setIncomingInvite(invite);
+      },
+      onMatchInviteDeclined: ({ inviteId, byName, expired }) => {
+        setOutgoingInvite((prev) => (prev?.inviteId === inviteId ? null : prev));
+        setIncomingInvite((prev) => (prev?.inviteId === inviteId ? null : prev));
+        showTimedInviteNotice(
+          expired
+            ? `Match request to ${byName} expired.`
+            : `${byName} declined your match request.`,
+          'err'
+        );
+      },
+      onMatchInviteCancelled: ({ inviteId, reason }) => {
+        setOutgoingInvite((prev) => (prev?.inviteId === inviteId ? null : prev));
+        setIncomingInvite((prev) => (prev?.inviteId === inviteId ? null : prev));
+        if (reason === 'OFFLINE') {
+          showTimedInviteNotice('Shooter went offline — match request closed.', 'err');
+        }
       },
       onError: (msg) => {
         setPvpError(msg);
+        showTimedInviteNotice(msg, 'err');
         window.setTimeout(() => setPvpError(null), 4000);
       },
       onOpponentLeft: () => {
         const e = engineRef.current;
         e.pvpMatch = null;
-        e.opponentGhost = null;
         e.phase = 'TITLE';
         setPvpError('Opponent left the room.');
         syncHud();
@@ -894,6 +1678,7 @@ export default function App() {
       onMatchState: (match) => {
         const e = engineRef.current;
         const prevStatus = e.pvpMatch?.status;
+        const prevCountdown = e.pvpMatch?.countdownLeft ?? 15;
         e.pvpMatch = match;
 
         const me = match.players.find((p) => p.id === e.myPlayerId);
@@ -902,27 +1687,28 @@ export default function App() {
         if (match.status === 'COUNTDOWN' && prevStatus !== 'COUNTDOWN') {
           setInQueue(false);
           setPvpError(null);
+          setIncomingInvite(null);
+          setOutgoingInvite(null);
+          setShowFriendsModal(false);
           resetCourtForMatch(e, 'PVP');
-          if (opp) {
-            e.opponentGhost = {
-              active: true,
-              name: opp.name,
-              pos: { x: RACK_CONFIGS[0].x, y: RACK_CONFIGS[0].y, z: 0 },
-              z: 0,
-              rackIndex: 0,
-              streak: 0,
-              followThrough: 0,
-            };
-          }
-          soundEngine.playTick(false);
         } else if (match.status === 'COUNTDOWN') {
-          if (prevStatus === 'COUNTDOWN') {
+          const targetElapsed = Math.max(0, 15 - match.countdownLeft);
+          if (Math.abs(targetElapsed - e.pvpIntroElapsed) > 1.1) {
+            e.pvpIntroElapsed = targetElapsed;
+          }
+          if (
+            prevStatus === 'COUNTDOWN' &&
+            match.countdownLeft !== prevCountdown &&
+            match.countdownLeft <= 3 &&
+            match.countdownLeft >= 1
+          ) {
             soundEngine.playTick(false);
           }
         } else if (match.status === 'PLAYING') {
           if (e.phase !== 'PLAYING') {
             e.phase = 'PLAYING';
             soundEngine.playWhistle();
+            triggerMatchStartHaptic();
           }
           // Gently keep time synced with authoritative server clock
           if (Math.abs(e.timeLeft - match.timeLeft) > 0.7) {
@@ -933,6 +1719,7 @@ export default function App() {
             e.contestShootingClosed = true;
             e.isHoldingShot = false;
             soundEngine.playBuzzer(e.currentRack, e.streak);
+            triggerBuzzerHaptic();
           }
 
           // Reconcile local player score when server has caught up
@@ -941,16 +1728,6 @@ export default function App() {
             e.streak = me.streak;
             e.multiplier = me.multiplier;
           }
-
-          if (opp && e.opponentGhost) {
-            e.opponentGhost.streak = opp.streak;
-            const oppRack = RACK_CONFIGS[Math.min(opp.currentRack, RACKS_COUNT - 1)];
-            e.opponentGhost.rackIndex = opp.currentRack;
-            // Offset slightly if sharing exact rack with local shooter so they don't overlap
-            const sameRack = opp.currentRack === e.currentRack;
-            e.opponentGhost.pos.x = oppRack.x + (sameRack ? 2.2 : 0);
-            e.opponentGhost.pos.y = oppRack.y + (sameRack ? 1.4 : 0);
-          }
         } else if (match.status === 'FINISHED') {
           if (me) {
             e.score = me.score;
@@ -958,12 +1735,21 @@ export default function App() {
             e.multiplier = me.multiplier;
           }
           if (e.phase !== 'GAME_OVER') {
+            finalizeContestHighlights(e);
             e.phase = 'GAME_OVER';
             e.isHoldingShot = false;
+            e.gatherBuffered = false;
             e.gameOverTimestamp = performance.now();
+            if (e.instantReplayEnabled && e.bestContestHighlight) {
+              soundEngine.unlock();
+              setActiveHighlight(e.bestContestHighlight);
+            }
             if (!e.contestCountedInCareer) {
               e.contestCountedInCareer = true;
+              const contestBestStreak = Math.max(e.bestStreak, me?.bestStreak ?? 0);
               e.career.contestsPlayed += 1;
+              e.career.totalBestStreakSum += contestBestStreak;
+              e.career.streakTrackedContests += 1;
               if (match.isTie) {
                 e.career.pvpDraws += 1;
               } else if (match.winnerId === e.myPlayerId) {
@@ -976,46 +1762,115 @@ export default function App() {
                 e.bestScore = e.score;
                 e.isNewBest = true;
               }
+              if (opp) {
+                const result: 'WIN' | 'LOSS' | 'DRAW' = match.isTie
+                  ? 'DRAW'
+                  : match.winnerId === e.myPlayerId
+                    ? 'WIN'
+                    : 'LOSS';
+                const myFinalScore = me?.score ?? e.score;
+                const oppFinalScore = opp.score;
+                const oppKey = normalizeOpponentKey(opp.name);
+                const prevRivalry = e.rivalries[oppKey];
+                const nextStreak =
+                  result === 'WIN'
+                    ? prevRivalry && prevRivalry.currentStreak > 0
+                      ? prevRivalry.currentStreak + 1
+                      : 1
+                    : result === 'LOSS'
+                      ? prevRivalry && prevRivalry.currentStreak < 0
+                        ? prevRivalry.currentStreak - 1
+                        : -1
+                      : 0;
+                const updatedRivalry: RivalryRecord = {
+                  opponentKey: oppKey,
+                  opponentName: opp.name.trim().slice(0, 24) || 'Opponent',
+                  wins: (prevRivalry?.wins ?? 0) + (result === 'WIN' ? 1 : 0),
+                  losses: (prevRivalry?.losses ?? 0) + (result === 'LOSS' ? 1 : 0),
+                  draws: (prevRivalry?.draws ?? 0) + (result === 'DRAW' ? 1 : 0),
+                  pointsFor: (prevRivalry?.pointsFor ?? 0) + myFinalScore,
+                  pointsAgainst: (prevRivalry?.pointsAgainst ?? 0) + oppFinalScore,
+                  lastScoreFor: myFinalScore,
+                  lastScoreAgainst: oppFinalScore,
+                  lastResult: result,
+                  currentStreak: nextStreak,
+                  lastPlayedAt: Date.now(),
+                };
+                e.rivalries[oppKey] = updatedRivalry;
+                saveRivalries(e.rivalries);
+                const activeUid = userProfileRef.current?.uid;
+                if (activeUid) {
+                  void syncRivalryToFirestore(activeUid, updatedRivalry).catch((err: unknown) => {
+                    console.error('Failed to sync rivalry record:', err);
+                  });
+                  if (match.leagueId && !e.leagueResultRecorded && userProfileRef.current) {
+                    e.leagueResultRecorded = true;
+                    void recordLeagueMatchResult(
+                      match.leagueId,
+                      userProfileRef.current.uid,
+                      userProfileRef.current.username,
+                      result,
+                      myFinalScore,
+                      oppFinalScore
+                    ).catch((err: unknown) => {
+                      console.error('Failed to record league match result:', err);
+                    });
+                  }
+                }
+              }
               persistCareer(e.career);
-              pvpClient.setProfile(playerNameRef.current, e.moneyRack, {
-                wins: e.career.pvpWins,
-                losses: e.career.pvpLosses,
-                draws: e.career.pvpDraws,
-              });
+              if (userProfileRef.current) {
+                const swishTotal = me ? me.swishCount : e.swishCount;
+                const finalScore = me ? me.score : e.score;
+                const pvpResult: 'WIN' | 'LOSS' | 'DRAW' = match.isTie
+                  ? 'DRAW'
+                  : match.winnerId === e.myPlayerId
+                    ? 'WIN'
+                    : 'LOSS';
+                void Promise.all([
+                  syncCourtRankingToFirestore(
+                    userProfileRef.current.uid,
+                    userProfileRef.current.username,
+                    e.courtTheme,
+                    finalScore,
+                    contestBestStreak,
+                    swishTotal
+                  ),
+                  syncPvpGlobalRankingToFirestore(
+                    userProfileRef.current.uid,
+                    userProfileRef.current.username,
+                    e.courtTheme,
+                    finalScore,
+                    contestBestStreak,
+                    swishTotal,
+                    pvpResult
+                  ),
+                ])
+                  .then(() => setCourtRankingsRefreshNonce((n) => n + 1))
+                  .catch((err: unknown) => {
+                    console.error('Failed to sync PVP rankings:', err);
+                  });
+              }
+              pvpClient.setProfile(
+                userProfileRef.current ? userProfileRef.current.username : playerNameRef.current,
+                e.moneyRack,
+                {
+                  wins: e.career.pvpWins,
+                  losses: e.career.pvpLosses,
+                  draws: e.career.pvpDraws,
+                },
+                userProfileRef.current?.uid ?? null,
+                buildServerProfileStats(e.career)
+              );
             }
           }
         }
 
         syncHud();
       },
-      onOpponentShot: (shot: OpponentShotEvent) => {
-        const e = engineRef.current;
-        if (e.phase !== 'PLAYING') return;
-        if (e.opponentGhost) {
-          e.opponentGhost.followThrough = 0.9;
-          e.opponentGhost.z = 1.6;
-        }
-        e.activeBalls.push({
-          id: e.nextBallId++,
-          rackIndex: shot.rackIndex,
-          ballIndex: shot.ballIndex,
-          isMoney: shot.isMoney,
-          multiplierAtRelease: 1,
-          isBuzzerBeater: false,
-          isRemote: true,
-          skipRimCollision: true,
-          pos: { ...shot.releasePos },
-          vel: { ...shot.vel },
-          spinAngle: 0,
-          spinRate: -11,
-          intendedOutcome: 'SWISH',
-          hasScored: false,
-          hasResolved: false,
-          hitRimCount: 0,
-          hitBackboard: false,
-          trail: [{ ...shot.releasePos }],
-          age: 0,
-        });
+      onOpponentShot: (_shot: OpponentShotEvent) => {
+        // Opponent avatar & shots are intentionally hidden during PVP matches;
+        // live opponent score tally updates via match_state.
       },
     });
 
@@ -1023,16 +1878,22 @@ export default function App() {
     return () => {
       pvpClient.disconnect();
     };
-  }, [persistCareer, syncHud]);
+  }, [persistCareer, showTimedInviteNotice, syncHud]);
 
   const startLocalContest = useCallback(
-    (targetMode?: 'SOLO' | 'HEAT_CHECK') => {
+    (targetMode?: 'SOLO' | 'FAST_BREAK' | 'HEAT_CHECK' | 'PRACTICE') => {
       soundEngine.unlock();
       const e = engineRef.current;
       const chosenMode: GameMode =
-        targetMode ?? (e.mode === 'HEAT_CHECK' ? 'HEAT_CHECK' : 'SOLO');
+        targetMode ??
+        (e.mode === 'FAST_BREAK'
+          ? 'FAST_BREAK'
+          : e.mode === 'HEAT_CHECK'
+            ? 'HEAT_CHECK'
+            : e.mode === 'PRACTICE'
+              ? 'PRACTICE'
+              : 'SOLO');
       e.pvpMatch = null;
-      e.opponentGhost = null;
       resetCourtForMatch(e, chosenMode);
       soundEngine.playTick(false);
       syncHud();
@@ -1052,29 +1913,73 @@ export default function App() {
 
   const handleSelectMoneyRack = useCallback(
     (rackIdx: number) => {
+      const safeRackIdx = normalizeMoneyRackIndex(rackIdx);
       const e = engineRef.current;
-      e.moneyRack = rackIdx;
-      e.ballsRecord = createInitialBallsRecord(rackIdx);
+      e.moneyRack = safeRackIdx;
+      e.ballsRecord = createInitialBallsRecord(safeRackIdx);
       e.moneyTotalCount = e.ballsRecord.filter((b) => b.isMoney).length;
-      pvpClient.setProfile(playerName, rackIdx, {
-        wins: e.career.pvpWins,
-        losses: e.career.pvpLosses,
-        draws: e.career.pvpDraws,
-      });
+      pvpClient.setProfile(
+        userProfileRef.current ? userProfileRef.current.username : playerName,
+        safeRackIdx,
+        {
+          wins: e.career.pvpWins,
+          losses: e.career.pvpLosses,
+          draws: e.career.pvpDraws,
+        },
+        userProfileRef.current?.uid ?? null,
+        buildServerProfileStats(e.career)
+      );
       syncHud();
     },
     [playerName, syncHud]
   );
 
   const handleChangePlayerName = useCallback((name: string) => {
-    setPlayerName(name);
+    const cleaned = saveGuestName(name);
+    setPlayerName(cleaned);
+    playerNameRef.current = cleaned;
     const e = engineRef.current;
-    pvpClient.setProfile(name, e.moneyRack, {
-      wins: e.career.pvpWins,
-      losses: e.career.pvpLosses,
-      draws: e.career.pvpDraws,
-    });
-  }, []);
+    if (!userProfileRef.current) {
+      e.shooterDisplayName = cleaned;
+    }
+    pvpClient.setProfile(
+      userProfileRef.current ? userProfileRef.current.username : cleaned,
+      e.moneyRack,
+      {
+        wins: e.career.pvpWins,
+        losses: e.career.pvpLosses,
+        draws: e.career.pvpDraws,
+      },
+      userProfileRef.current?.uid ?? null,
+      buildServerProfileStats(e.career)
+    );
+    syncHud();
+  }, [syncHud]);
+
+  const handleUpdatedAccountProfile = useCallback(
+    (updated: UserProfile) => {
+      setUserProfile(updated);
+      userProfileRef.current = updated;
+      setPlayerName(updated.username);
+      playerNameRef.current = updated.username;
+      const e = engineRef.current;
+      e.shooterDisplayName = `@${updated.username}`;
+      pvpClient.setProfile(
+        updated.username,
+        e.moneyRack,
+        {
+          wins: e.career.pvpWins,
+          losses: e.career.pvpLosses,
+          draws: e.career.pvpDraws,
+        },
+        updated.uid,
+        buildServerProfileStats(e.career)
+      );
+      syncHud();
+      setCourtRankingsRefreshNonce((n) => n + 1);
+    },
+    [syncHud]
+  );
 
   const handleToggleMute = useCallback(() => {
     const nextMuted = !soundEngine.isMuted();
@@ -1082,8 +1987,28 @@ export default function App() {
       soundEngine.unlock();
     }
     soundEngine.setMuted(nextMuted);
+    setHapticsMuted(nextMuted);
     syncHud();
   }, [syncHud]);
+
+  const handleSelectCourt = useCallback(
+    (theme: CourtThemeId) => {
+      const e = engineRef.current;
+      if (!isCourtUnlocked(theme, e.career)) return;
+      e.courtTheme = theme;
+      saveSelectedCourt(theme);
+      soundEngine.unlock();
+      soundEngine.setCourtTheme(theme);
+      soundEngine.playCourtPreviewChant(theme);
+      syncHud();
+    },
+    [syncHud]
+  );
+
+  const handlePreviewCourtChant = useCallback((theme: CourtThemeId) => {
+    soundEngine.unlock();
+    soundEngine.playCourtPreviewChant(theme);
+  }, []);
 
   const handlePause = useCallback(() => {
     const e = engineRef.current;
@@ -1099,18 +2024,51 @@ export default function App() {
     }
   }, [syncHud]);
 
+  const handleToggleInstantReplay = useCallback(() => {
+    const e = engineRef.current;
+    e.instantReplayEnabled = !e.instantReplayEnabled;
+    saveInstantReplayEnabled(e.instantReplayEnabled);
+    syncHud();
+  }, [syncHud]);
+
+  const handleToggleCameraMode = useCallback(() => {
+    const e = engineRef.current;
+    const nextMode: CameraMode = e.cameraMode === 'PRO_STATIC' ? 'FOLLOW' : 'PRO_STATIC';
+    e.cameraMode = nextMode;
+    saveCameraMode(nextMode);
+    e.cameraSnapZoom = 0;
+    const activeRack = RACK_CONFIGS[Math.min(e.currentRack, RACKS_COUNT - 1)];
+    if (activeRack && e.phase !== 'TITLE') {
+      const hoopDelta = {
+        x: e.hoopPos.x - HOOP_POS.x,
+        y: e.hoopPos.y - HOOP_POS.y,
+        z: e.hoopPos.z - HOOP_POS.z,
+      };
+      const rig = computeRackCameraRig(activeRack, nextMode, hoopDelta);
+      e.camera.pos = { ...rig.pos };
+      e.camera.target = { ...rig.target };
+      e.camera.focalLength = rig.focalLength;
+    }
+    syncHud();
+  }, [syncHud]);
+
+  const handleSkipInstantReplay = useCallback(() => {
+    setActiveHighlight(null);
+  }, []);
+
   const handleQuitToTitle = useCallback(() => {
     const e = engineRef.current;
+    setActiveHighlight(null);
     if (e.mode === 'PVP') {
       pvpClient.leaveRoom();
       pvpClient.leaveQueue();
       e.pvpMatch = null;
-      e.opponentGhost = null;
     }
     e.phase = 'TITLE';
     e.isHoldingShot = false;
     e.gatherBuffered = false;
     e.isMovingToRack = false;
+    e.runBlend = 0;
     e.hoopPos = { ...HOOP_POS };
     e.hoopTargetPos = { ...HOOP_POS };
     e.activeBalls = [];
@@ -1125,15 +2083,35 @@ export default function App() {
     const e = engineRef.current;
     if (e.phase !== 'PLAYING' || e.contestShootingClosed) return;
     if (e.isHoldingShot) return;
-    if (e.currentRack >= RACKS_COUNT || e.currentBall >= BALLS_PER_RACK) return;
-    if (e.gatherCooldown > 0 || e.rackMoveTimer > 0 || e.isMovingToRack) {
+    if (e.currentRack >= RACKS_COUNT || e.currentBall >= getRackBallCount(e.currentRack)) return;
+
+    const targetRack = RACK_CONFIGS[Math.min(e.currentRack, RACKS_COUNT - 1)];
+    const distToRack = targetRack
+      ? Math.hypot(targetRack.x - e.shooterPos.x, targetRack.y - e.shooterPos.y)
+      : 999;
+
+    // Never allow gathering, shooting, or buffering while moving/sprinting between racks
+    if (
+      e.isMovingToRack ||
+      e.rackMoveTimer > 0 ||
+      e.sprintDelayTimer > 0 ||
+      distToRack > 0.16
+    ) {
+      e.gatherBuffered = false;
+      return;
+    }
+
+    // Only allow crisp same-rack buffer while cooling down / landing at the current rack
+    if (e.gatherCooldown > 0 || e.shooterZ > 0.06 || e.runBlend > 0.14) {
       e.gatherBuffered = true;
       return;
     }
 
     e.gatherBuffered = false;
+    e.perfectZoneHapticFired = false;
     soundEngine.unlock();
     soundEngine.playGather();
+    triggerShotGatherHaptic();
     e.isHoldingShot = true;
     e.meterValue = 0;
     e.followThroughAmount = 0;
@@ -1146,13 +2124,26 @@ export default function App() {
     e.isHoldingShot = false;
 
     if (e.phase !== 'PLAYING' || e.contestShootingClosed) return;
-    if (e.currentRack >= RACKS_COUNT || e.currentBall >= BALLS_PER_RACK) return;
+    if (e.currentRack >= RACKS_COUNT || e.currentBall >= getRackBallCount(e.currentRack)) return;
 
-    const slotIdx = e.currentRack * BALLS_PER_RACK + e.currentBall;
+    const targetRack = RACK_CONFIGS[Math.min(e.currentRack, RACKS_COUNT - 1)];
+    const distToRack = targetRack
+      ? Math.hypot(targetRack.x - e.shooterPos.x, targetRack.y - e.shooterPos.y)
+      : 999;
+    if (e.isMovingToRack || e.rackMoveTimer > 0 || distToRack > 0.25 || e.runBlend > 0.2) {
+      e.gatherAmount = 0;
+      e.meterValue = 0;
+      return;
+    }
+
+    const slotIdx = getSlotIndex(e.currentRack, e.currentBall);
     const slot = e.ballsRecord[slotIdx];
     if (!slot || slot.status !== 'PENDING') return;
 
-    const diff = getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina);
+    const diff =
+      e.mode === 'PRACTICE'
+        ? DIFFICULTY_TIERS[0]
+        : getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina);
     const releaseVal = e.meterValue;
 
     const hdx = e.hoopPos.x - e.shooterPos.x;
@@ -1164,13 +2155,25 @@ export default function App() {
     const releasePos: Vec3 = {
       x: e.shooterPos.x + fx * 0.75,
       y: e.shooterPos.y + fy * 0.75,
-      z: 7.9,
+      z: 8.05,
     };
 
     const launch = computeShotLaunch(releasePos, releaseVal, diff, e.windVec, e.hoopPos);
 
-    e.shooterVelZ = 7.1;
-    e.stamina = Math.max(0, e.stamina - 3.5);
+    const shotStaminaCost =
+      e.mode === 'PRACTICE'
+        ? 0
+        : launch.timingQuality === 'PERFECT'
+          ? 1.2
+          : launch.timingQuality === 'MAKE'
+            ? 2.2
+            : 3.5;
+    e.shooterVelZ = 8.65;
+    e.landingSquat = 0;
+    e.ballPickupTimer = 0;
+    e.stamina = e.mode === 'PRACTICE' ? 100 : Math.max(0, e.stamina - shotStaminaCost);
+    e.staminaMinObserved = Math.min(e.staminaMinObserved, e.stamina);
+    e.staminaSavedTiming += e.mode === 'PRACTICE' ? 0 : 3.5 - shotStaminaCost;
     e.gatherAmount = 0;
     e.followThroughAmount = 1.0;
     e.hasShotAnyBall = true;
@@ -1182,40 +2185,76 @@ export default function App() {
     let recordedTiming: TimingQuality;
     if (launch.timingQuality === 'PERFECT') {
       e.lastReleaseLabel = 'PERFECT';
-      e.lastReleaseColor = '#F59E0B';
+      e.lastReleaseColor = '#FEF08A';
       e.timingBreakdown.perfect += 1;
       recordedTiming = 'PERFECT';
       // Trigger crisp camera snap zoom on perfect release
       e.cameraSnapZoom = 1.0;
+
+      // Second Wind: 3 consecutive perfect releases restore +10% stamina
+      e.consecutivePerfectShots += 1;
+      if (e.consecutivePerfectShots >= 3) {
+        e.consecutivePerfectShots = 0;
+        e.secondWindCount += 1;
+        e.secondWindFlashTimer = 1.85;
+        e.stamina = Math.min(100, e.stamina + 10);
+        e.staminaSavedTiming += 10;
+        triggerSecondWindHaptic();
+        spawnParticles(
+          e,
+          { x: e.shooterPos.x, y: e.shooterPos.y, z: 5.2 },
+          18,
+          '#6EE7B7',
+          6.8
+        );
+        addCallout(
+          e,
+          'SECOND WIND! +10% STAMINA',
+          '#6EE7B7',
+          { x: e.shooterPos.x, y: e.shooterPos.y, z: 9.4 },
+          '3× PERFECT RELEASES'
+        );
+      }
     } else if (launch.timingQuality === 'MAKE') {
       e.lastReleaseLabel = 'GOOD';
-      e.lastReleaseColor = '#10B981';
+      e.lastReleaseColor = '#6EE7B7';
       e.timingBreakdown.good += 1;
       recordedTiming = 'GOOD';
+      e.consecutivePerfectShots = 0;
     } else if (launch.timingQuality === 'EARLY') {
       e.lastReleaseLabel = 'EARLY';
-      e.lastReleaseColor = '#38BDF8';
+      e.lastReleaseColor = '#7DD3FC';
       e.timingBreakdown.early += 1;
       recordedTiming = 'EARLY';
+      e.consecutivePerfectShots = 0;
     } else {
       e.lastReleaseLabel = 'LATE';
-      e.lastReleaseColor = '#EF4444';
+      e.lastReleaseColor = '#FECACA';
       e.timingBreakdown.late += 1;
       recordedTiming = 'LATE';
+      e.consecutivePerfectShots = 0;
     }
 
     slot.status = 'IN_AIR';
     slot.timingQuality = recordedTiming;
     slot.multiplierUsed = e.multiplier;
+    e.lastTimingQuality = recordedTiming;
 
+    const ballId = e.nextBallId++;
     const ball: ActiveBall = {
-      id: e.nextBallId++,
+      id: ballId,
       rackIndex: e.currentRack,
       ballIndex: e.currentBall,
       isMoney: slot.isMoney,
       multiplierAtRelease: e.multiplier,
       streakAtRelease: e.streak,
-      isBuzzerBeater: e.mode !== 'HEAT_CHECK' && e.timeLeft <= 0.35,
+      difficultyLevelAtRelease: diff.level,
+      timingQualityAtRelease: recordedTiming,
+      isBuzzerBeater:
+        e.mode !== 'HEAT_CHECK' &&
+        e.mode !== 'PRACTICE' &&
+        e.mode !== 'FAST_BREAK' &&
+        e.timeLeft <= 0.35,
       skipRimCollision: launch.skipRimCollision,
       pos: releasePos,
       vel: launch.vel,
@@ -1226,11 +2265,31 @@ export default function App() {
       hasResolved: false,
       hitRimCount: 0,
       hitBackboard: false,
+      shooterPosAtRelease: { ...e.shooterPos },
+      shooterFacingAtRelease: { x: fx, y: fy },
+      hoopPosAtRelease: { ...e.hoopPos },
+      windMphAtRelease: e.windMph,
+      highlightFrames: [
+        { t: 0, x: releasePos.x, y: releasePos.y, z: releasePos.z, spinAngle: 0 },
+      ],
+      rimHitTimes: [],
       trail: [{ ...releasePos }],
       age: 0,
     };
     e.activeBalls.push(ball);
+    e.shotChart.push({
+      id: ballId,
+      rackIndex: e.currentRack,
+      ballIndex: e.currentBall,
+      x: e.shooterPos.x,
+      y: e.shooterPos.y,
+      isMoney: slot.isMoney,
+      timingQuality: recordedTiming,
+      status: 'IN_AIR',
+      pointsAwarded: 0,
+    });
     soundEngine.playRelease();
+    triggerShotReleaseHaptic(recordedTiming);
 
     if (e.mode === 'PVP') {
       pvpClient.sendShotReleased(
@@ -1242,43 +2301,69 @@ export default function App() {
       );
     }
 
-    if (e.currentBall + 1 < BALLS_PER_RACK) {
+    const curRackBallCount = getRackBallCount(e.currentRack);
+    if (e.currentBall + 1 < curRackBallCount) {
       e.currentBall += 1;
-    } else if (e.currentRack + 1 < RACKS_COUNT) {
-      e.currentRack += 1;
-      e.currentBall = 0;
-      e.isMovingToRack = true;
-      e.rackMoveTimer = 0.25;
-      e.windTargetAngle += (Math.random() - 0.5) * 0.9;
-    } else if (e.mode === 'HEAT_CHECK') {
-      // Endless Heat Check rotation: refill next rack and sprint cleanly around/across
-      const nextRack = 0;
-      const startIdx = nextRack * BALLS_PER_RACK;
-      for (let b = 0; b < BALLS_PER_RACK; b++) {
-        const s = e.ballsRecord[startIdx + b];
-        if (s) {
-          s.status = 'PENDING';
-          s.outcome = undefined;
-          s.timingQuality = undefined;
-          s.pointsAwarded = 0;
-          s.multiplierUsed = 1;
+    } else {
+      if (e.mode === 'FAST_BREAK') {
+        const cumMs = Math.round(e.fastBreakElapsedMs);
+        e.fastBreakRackCumulativesMs[e.currentRack] = cumMs;
+        if (e.currentRack === RACKS_COUNT - 1) {
+          e.fastBreakFinishMs = cumMs;
+          const completedSplits = e.fastBreakRackCumulativesMs.map((v) => v ?? cumMs);
+          if (e.career.bestFastBreakMs === 0 || cumMs < e.career.bestFastBreakMs) {
+            e.fastBreakIsNewBest = true;
+            e.career.bestFastBreakMs = cumMs;
+            e.career.bestFastBreakSplitsMs = completedSplits;
+          }
+          e.career.fastBreakContests += 1;
+          persistCareer(e.career);
+          triggerBuzzerHaptic();
         }
       }
-      e.currentRack = nextRack;
-      e.currentBall = 0;
-      e.isMovingToRack = true;
-      e.rackMoveTimer = 0.35;
-      e.windTargetAngle += (Math.random() - 0.5) * 0.9;
-    } else {
-      e.currentBall = BALLS_PER_RACK;
-      e.contestShootingClosed = true;
-      e.finishGraceTimer = 0.65;
+
+      if (e.currentRack + 1 < RACKS_COUNT) {
+        e.currentRack += 1;
+        e.currentBall = 0;
+        e.sprintDelayTimer = e.mode === 'FAST_BREAK' ? 0.14 : 0.26;
+        e.rackMoveTimer = 0.28;
+        e.windTargetAngle += (Math.random() - 0.5) * 0.9;
+      } else if (e.mode === 'HEAT_CHECK' || e.mode === 'PRACTICE') {
+        // Endless Heat Check / Practice rotation: refill next rack and cycle smoothly
+        const nextRack = 0;
+        const startIdx = getSlotIndex(nextRack, 0);
+        const nextCount = getRackBallCount(nextRack);
+        for (let b = 0; b < nextCount; b++) {
+          const s = e.ballsRecord[startIdx + b];
+          if (s) {
+            s.status = 'PENDING';
+            s.outcome = undefined;
+            s.timingQuality = undefined;
+            s.pointsAwarded = 0;
+            s.multiplierUsed = 1;
+          }
+        }
+        e.currentRack = nextRack;
+        e.currentBall = 0;
+        e.sprintDelayTimer = 0.28;
+        e.rackMoveTimer = 0.35;
+        e.windTargetAngle += (Math.random() - 0.5) * 0.9;
+      } else {
+        e.currentBall = curRackBallCount;
+        e.contestShootingClosed = true;
+        e.finishGraceTimer = 0.65;
+      }
     }
 
-    // In Heat Check, pre-reset the rack we just left when transitioning between racks so HUD stays fresh
-    if (e.mode === 'HEAT_CHECK' && e.currentBall === 0 && e.currentRack > 0) {
-      const startIdx = e.currentRack * BALLS_PER_RACK;
-      for (let b = 0; b < BALLS_PER_RACK; b++) {
+    // In Heat Check & Practice, pre-reset the rack we just left when transitioning between racks so HUD stays fresh
+    if (
+      (e.mode === 'HEAT_CHECK' || e.mode === 'PRACTICE') &&
+      e.currentBall === 0 &&
+      e.currentRack > 0
+    ) {
+      const startIdx = getSlotIndex(e.currentRack, 0);
+      const curCount = getRackBallCount(e.currentRack);
+      for (let b = 0; b < curCount; b++) {
         const s = e.ballsRecord[startIdx + b];
         if (s && s.status !== 'PENDING') {
           s.status = 'PENDING';
@@ -1291,17 +2376,30 @@ export default function App() {
     }
 
     syncHud();
-  }, [syncHud]);
+  }, [persistCareer, syncHud]);
 
   // Keyboard & window blur bindings
   useEffect(() => {
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.repeat) return;
+      if (loadingVisibleRef.current) return;
       const e = engineRef.current;
 
       // Don't hijack typing inside name/room input fields
       const target = ev.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        if (ev.code === 'Escape' && showEditUsernameRef.current) {
+          ev.preventDefault();
+          setShowEditUsername(false);
+        }
+        return;
+      }
+
+      if (showEditUsernameRef.current) {
+        if (ev.code === 'Escape') {
+          ev.preventDefault();
+          setShowEditUsername(false);
+        }
         return;
       }
 
@@ -1311,7 +2409,19 @@ export default function App() {
         return;
       }
 
-      const isLocalMode = e.mode === 'SOLO' || e.mode === 'HEAT_CHECK';
+      if (activeHighlightRef.current) {
+        if (ev.code === 'Escape') {
+          ev.preventDefault();
+          setActiveHighlight(null);
+        }
+        return;
+      }
+
+      const isLocalMode =
+        e.mode === 'SOLO' ||
+        e.mode === 'FAST_BREAK' ||
+        e.mode === 'HEAT_CHECK' ||
+        e.mode === 'PRACTICE';
 
       if (ev.code === 'Escape' || ev.code === 'KeyP') {
         if (
@@ -1326,12 +2436,26 @@ export default function App() {
 
       if (
         !showAuthOverlayRef.current &&
+        !showEditUsernameRef.current &&
+        !showCourtLockerRef.current &&
+        !showLeaguesModalRef.current &&
+        !showFriendsModalRef.current &&
+        !activeHighlightRef.current &&
         e.phase === 'TITLE' &&
         isLocalMode &&
+        (!target || !target.closest('button, a, [role="button"]')) &&
         (ev.code === 'Enter' || ev.code === 'Space')
       ) {
         ev.preventDefault();
-        startLocalContest(e.mode === 'HEAT_CHECK' ? 'HEAT_CHECK' : 'SOLO');
+        startLocalContest(
+          e.mode === 'FAST_BREAK'
+            ? 'FAST_BREAK'
+            : e.mode === 'HEAT_CHECK'
+              ? 'HEAT_CHECK'
+              : e.mode === 'PRACTICE'
+                ? 'PRACTICE'
+                : 'SOLO'
+        );
         return;
       }
 
@@ -1340,18 +2464,29 @@ export default function App() {
         e.countdownTimer = 0;
         e.phase = 'PLAYING';
         soundEngine.playWhistle();
+        triggerMatchStartHaptic();
         syncHud();
         return;
       }
 
       if (
+        !activeHighlightRef.current &&
+        !showEditUsernameRef.current &&
         e.phase === 'GAME_OVER' &&
         isLocalMode &&
         (ev.code === 'Enter' || ev.code === 'Space')
       ) {
         if (performance.now() - e.gameOverTimestamp > 450) {
           ev.preventDefault();
-          startLocalContest(e.mode === 'HEAT_CHECK' ? 'HEAT_CHECK' : 'SOLO');
+          startLocalContest(
+            e.mode === 'FAST_BREAK'
+              ? 'FAST_BREAK'
+              : e.mode === 'HEAT_CHECK'
+                ? 'HEAT_CHECK'
+                : e.mode === 'PRACTICE'
+                  ? 'PRACTICE'
+                  : 'SOLO'
+          );
         }
         return;
       }
@@ -1370,18 +2505,72 @@ export default function App() {
 
     const onBlur = () => {
       const e = engineRef.current;
+      activeShotPointerIdRef.current = null;
       e.isHoldingShot = false;
       e.gatherBuffered = false;
       e.gatherAmount = 0;
     };
 
+    const onVisibilityChange = () => {
+      const hidden = document.hidden;
+      soundEngine.handleVisibilityChange(hidden);
+      if (hidden) {
+        hiddenSinceRef.current = Date.now();
+        saveLastVisitAt(Date.now());
+        const e = engineRef.current;
+        activeShotPointerIdRef.current = null;
+        e.isHoldingShot = false;
+        e.gatherBuffered = false;
+        e.gatherAmount = 0;
+        if (
+          (e.mode === 'SOLO' ||
+            e.mode === 'FAST_BREAK' ||
+            e.mode === 'HEAT_CHECK' ||
+            e.mode === 'PRACTICE') &&
+          (e.phase === 'PLAYING' || e.phase === 'COUNTDOWN')
+        ) {
+          e.phase = 'PAUSED';
+          syncHud();
+        }
+      } else {
+        const awayMs = hiddenSinceRef.current !== null ? Date.now() - hiddenSinceRef.current : 0;
+        hiddenSinceRef.current = null;
+        if (awayMs >= LONG_AWAY_THRESHOLD_MS && engineRef.current.phase === 'TITLE') {
+          arenaRenderedFramesRef.current = 0;
+          arenaReadyMarkedRef.current = false;
+          setLoadingChecklist({
+            fontsReady: false,
+            arenaReady: false,
+            accountReady: auth.currentUser === null,
+            lobbyReady: wsConnectedRef.current,
+          });
+          setLoadingState({ visible: true, reason: 'LONG_AWAY' });
+          setLoadingRunId((id) => id + 1);
+        } else {
+          saveLastVisitAt(Date.now());
+        }
+      }
+    };
+
+    const onFirstGestureUnlock = () => {
+      soundEngine.unlock();
+    };
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('pagehide', onBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('touchstart', onFirstGestureUnlock, { passive: true, capture: true });
+    window.addEventListener('pointerdown', onFirstGestureUnlock, { passive: true, capture: true });
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('pagehide', onBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('touchstart', onFirstGestureUnlock, { capture: true });
+      window.removeEventListener('pointerdown', onFirstGestureUnlock, { capture: true });
     };
   }, [beginShotGather, handlePause, handleToggleMute, releaseShot, startLocalContest, syncHud]);
 
@@ -1400,8 +2589,13 @@ export default function App() {
       const e = engineRef.current;
 
       if (canvas) {
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const rect = canvas.getBoundingClientRect();
+        const isMobileTouch =
+          rect.width < 900 ||
+          (typeof window.matchMedia === 'function' &&
+            window.matchMedia('(pointer: coarse)').matches);
+        const maxDpr = isMobileTouch ? 1.75 : 2;
+        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
         const targetW = Math.max(1, Math.round(rect.width * dpr));
         const targetH = Math.max(1, Math.round(rect.height * dpr));
         if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -1433,21 +2627,106 @@ export default function App() {
 
           if (e.phase === 'TITLE') {
             const sway = Math.sin(e.clockTime * 0.35);
-            const topRack = RACK_CONFIGS[2];
+            const swayCos = Math.cos(e.clockTime * 0.35);
             e.hoopPos = { ...HOOP_POS };
             e.hoopTargetPos = { ...HOOP_POS };
-            e.camera.pos.x = topRack.camPos.x + sway * 4.5;
-            e.camera.pos.y = topRack.camPos.y + Math.cos(e.clockTime * 0.35) * 1.4;
-            e.camera.pos.z = topRack.camPos.z + 0.35;
-            e.camera.target = { x: sway * 0.8, y: 0, z: 9.2 };
-            e.camera.focalLength = 1.0;
+
+            let rackIdx = 2;
+            let desiredPos = {
+              x: RACK_CONFIGS[2].camPos.x + sway * 4.5,
+              y: RACK_CONFIGS[2].camPos.y + swayCos * 1.4,
+              z: RACK_CONFIGS[2].camPos.z + 0.35,
+            };
+            let desiredTarget = { x: sway * 0.8, y: 0, z: 9.2 };
+            let desiredFocal = 1.0;
+
+            if (e.mode === 'FAST_BREAK') {
+              rackIdx = 1;
+              const r1 = RACK_CONFIGS[1];
+              desiredPos = {
+                x: r1.camPos.x + sway * 3.4 - 1.5,
+                y: r1.camPos.y + 1.2 + swayCos * 1.2,
+                z: r1.camPos.z + 0.95,
+              };
+              desiredTarget = { x: sway * 0.6, y: 0.4, z: 9.4 };
+              desiredFocal = 0.94;
+            } else if (e.mode === 'HEAT_CHECK') {
+              rackIdx = 2;
+              desiredPos = {
+                x: sway * 6.5,
+                y: 31.5 + swayCos * 1.6,
+                z: 11.4,
+              };
+              desiredTarget = { x: sway * 1.1, y: 2.0, z: 9.8 };
+              desiredFocal = 0.92;
+            } else if (e.mode === 'PRACTICE') {
+              rackIdx = 4;
+              const r4 = RACK_CONFIGS[4];
+              desiredPos = {
+                x: r4.camPos.x + sway * 2.8 + 1.2,
+                y: r4.camPos.y + swayCos * 1.1,
+                z: r4.camPos.z - 0.1,
+              };
+              desiredTarget = { x: sway * 0.5, y: 0, z: 9.3 };
+              desiredFocal = 1.06;
+            } else if (e.mode === 'PVP') {
+              rackIdx = 2;
+              desiredPos = {
+                x: sway * 7.2,
+                y: 33.8 + swayCos * 1.5,
+                z: 9.6,
+              };
+              desiredTarget = { x: sway * 0.9, y: 0, z: 9.4 };
+              desiredFocal = 0.90;
+            }
+
+            const titleLerp = 1 - Math.exp(-5.0 * dt);
+            e.camera.pos.x += (desiredPos.x - e.camera.pos.x) * titleLerp;
+            e.camera.pos.y += (desiredPos.y - e.camera.pos.y) * titleLerp;
+            e.camera.pos.z += (desiredPos.z - e.camera.pos.z) * titleLerp;
+            e.camera.target.x += (desiredTarget.x - e.camera.target.x) * titleLerp;
+            e.camera.target.y += (desiredTarget.y - e.camera.target.y) * titleLerp;
+            e.camera.target.z += (desiredTarget.z - e.camera.target.z) * titleLerp;
+            e.camera.focalLength += (desiredFocal - e.camera.focalLength) * titleLerp;
             e.cameraSnapZoom = 0;
-            e.shooterPos = { x: topRack.x, y: topRack.y, z: 0 };
-            e.shooterFacing = { x: 0, y: -1 };
+
+            const showcaseRack = RACK_CONFIGS[rackIdx];
+            e.shooterPos.x += (showcaseRack.x - e.shooterPos.x) * titleLerp;
+            e.shooterPos.y += (showcaseRack.y - e.shooterPos.y) * titleLerp;
+            e.shooterPos.z = 0;
+            const sfx = -e.shooterPos.x;
+            const sfy = -e.shooterPos.y;
+            const sfLen = Math.hypot(sfx, sfy) || 1;
+            e.shooterFacing = { x: sfx / sfLen, y: sfy / sfLen };
             e.isMovingToRack = false;
+            e.runBlend = 0;
+            e.gatherAmount = 0;
+            e.followThroughAmount = 0;
+            e.shooterAnimState = 'DRIBBLING';
+            e.dribbleBlend = 1;
             e.stamina = 100;
+            e.shooterLabelAlpha += (1 - e.shooterLabelAlpha) * (1 - Math.exp(-8 * dt));
           } else if (e.phase !== 'PAUSED') {
-            const isLocalContest = e.mode === 'SOLO' || e.mode === 'HEAT_CHECK';
+            const isActiveShooting =
+              e.phase === 'PLAYING' &&
+              (e.isHoldingShot ||
+                e.gatherBuffered ||
+                e.gatherAmount > 0.04 ||
+                e.followThroughAmount > 0.04 ||
+                e.shooterZ > 0.04 ||
+                e.meterFeedbackTimer > 0 ||
+                e.gatherCooldown > 0);
+            const targetLabelAlpha =
+              e.phase === 'PLAYING' ? (isActiveShooting ? 0 : 0.88) : 1;
+            const labelLerpRate = targetLabelAlpha < e.shooterLabelAlpha ? 11.5 : 3.2;
+            e.shooterLabelAlpha +=
+              (targetLabelAlpha - e.shooterLabelAlpha) *
+              (1 - Math.exp(-labelLerpRate * dt));
+            const isLocalContest =
+              e.mode === 'SOLO' ||
+              e.mode === 'FAST_BREAK' ||
+              e.mode === 'HEAT_CHECK' ||
+              e.mode === 'PRACTICE';
 
             // Local contest countdown
             if (e.phase === 'COUNTDOWN' && isLocalContest) {
@@ -1462,12 +2741,20 @@ export default function App() {
                 e.countdownTimer = 0;
                 e.phase = 'PLAYING';
                 soundEngine.playWhistle();
+                triggerMatchStartHaptic();
                 syncHud();
               }
             }
 
-            // Active Play Clock (disabled in Heat Check)
-            if (e.phase === 'PLAYING' && !e.contestShootingClosed && e.mode !== 'HEAT_CHECK') {
+            // Active Play Clock (Fast-Break counts up; Heat Check & Practice unclocked)
+            if (e.phase === 'PLAYING' && !e.contestShootingClosed && e.mode === 'FAST_BREAK') {
+              e.fastBreakElapsedMs += dt * 1000;
+            } else if (
+              e.phase === 'PLAYING' &&
+              !e.contestShootingClosed &&
+              e.mode !== 'HEAT_CHECK' &&
+              e.mode !== 'PRACTICE'
+            ) {
               e.timeLeft -= dt;
               const sec = Math.ceil(e.timeLeft);
               if (sec <= 5 && sec >= 1 && sec < e.lastTickSecond) {
@@ -1483,6 +2770,7 @@ export default function App() {
                 e.gatherAmount = 0;
                 e.finishGraceTimer = 0.75;
                 soundEngine.playBuzzer(e.currentRack, e.streak);
+                triggerBuzzerHaptic();
                 syncHud();
               }
             }
@@ -1503,8 +2791,14 @@ export default function App() {
                 addCallout(
                   e,
                   'HOOP SHIFT!',
-                  '#F59E0B',
-                  { x: e.hoopTargetPos.x, y: e.hoopTargetPos.y, z: e.hoopTargetPos.z + 2.1 }
+                  '#FDE047',
+                  {
+                    x: e.hoopTargetPos.x,
+                    y: e.hoopTargetPos.y + (BACKBOARD_Y - HOOP_POS.y) - 0.45,
+                    z: e.hoopTargetPos.z + (BACKBOARD_TOP_Z - HOOP_POS.z) + 0.9,
+                  },
+                  undefined,
+                  true
                 );
               }
 
@@ -1519,17 +2813,42 @@ export default function App() {
               e.hoopPos.z += (goalZ - e.hoopPos.z) * hoopLerp;
             }
 
-            // Shooter jump & follow-through
+            // Shooter jump, grounded toe-rise pre-release, follow-through, and soft landing absorption
             if (e.shooterZ > 0 || e.shooterVelZ > 0) {
+              const wasAirborne = e.shooterZ > 0.04;
               e.shooterVelZ -= 32 * dt;
               e.shooterZ += e.shooterVelZ * dt;
               if (e.shooterZ <= 0) {
                 e.shooterZ = 0;
                 e.shooterVelZ = 0;
+                if (wasAirborne) {
+                  e.landingSquat = 0.78;
+                  const nextRackPos = RACK_CONFIGS[Math.min(e.currentRack, RACKS_COUNT - 1)];
+                  const distOnLand = Math.hypot(
+                    nextRackPos.x - e.shooterPos.x,
+                    nextRackPos.y - e.shooterPos.y
+                  );
+                  if (
+                    distOnLand <= 0.12 &&
+                    !e.contestShootingClosed &&
+                    e.currentBall < getRackBallCount(e.currentRack)
+                  ) {
+                    e.ballPickupTimer = 0.18;
+                  }
+                }
               }
             }
+            if (e.landingSquat > 0) {
+              e.landingSquat = Math.max(0, e.landingSquat - dt * 3.6);
+            }
+            if (e.ballPickupTimer > 0) {
+              e.ballPickupTimer = Math.max(0, e.ballPickupTimer - dt);
+            }
+            if (e.sprintDelayTimer > 0) {
+              e.sprintDelayTimer = Math.max(0, e.sprintDelayTimer - dt);
+            }
             if (e.followThroughAmount > 0) {
-              e.followThroughAmount = Math.max(0, e.followThroughAmount - dt * 1.9);
+              e.followThroughAmount = Math.max(0, e.followThroughAmount - dt * 1.75);
             }
             if (e.gatherCooldown > 0) {
               e.gatherCooldown = Math.max(0, e.gatherCooldown - dt);
@@ -1540,11 +2859,8 @@ export default function App() {
             if (e.meterFeedbackTimer > 0) {
               e.meterFeedbackTimer = Math.max(0, e.meterFeedbackTimer - dt);
             }
-
-            // Opponent Ghost decay
-            if (e.opponentGhost) {
-              e.opponentGhost.z = Math.max(0, e.opponentGhost.z - dt * 4.5);
-              e.opponentGhost.followThrough = Math.max(0, e.opponentGhost.followThrough - dt * 1.9);
+            if (e.secondWindFlashTimer > 0) {
+              e.secondWindFlashTimer = Math.max(0, e.secondWindFlashTimer - dt);
             }
 
             // Stick-figure athletic rack-to-rack running along 3-point perimeter / court chord
@@ -1552,22 +2868,41 @@ export default function App() {
             const dxRack = targetRack.x - e.shooterPos.x;
             const dyRack = targetRack.y - e.shooterPos.y;
             const distToRack = Math.hypot(dxRack, dyRack);
+            const readyToSprint = distToRack > 0.12 && e.sprintDelayTimer <= 0 && e.shooterZ <= 0.14;
 
-            if (distToRack > 0.24) {
+            if (distToRack > 0.16 || e.rackMoveTimer > 0) {
+              e.isHoldingShot = false;
+              e.gatherBuffered = false;
+              e.gatherAmount = 0;
+              e.meterValue = 0;
+            }
+
+            if (readyToSprint) {
               e.isMovingToRack = true;
-              e.stamina = Math.max(0, e.stamina - 30 * dt);
+              e.runBlend = Math.min(1, e.runBlend + dt * 12);
+              if (e.mode !== 'PRACTICE') {
+                const drainRate = distToRack > 28 ? 22 : 30;
+                e.stamina = Math.max(0, e.stamina - drainRate * dt);
+                if (e.phase === 'PLAYING') {
+                  e.staminaMinObserved = Math.min(e.staminaMinObserved, e.stamina);
+                }
+              }
               const curAngle = Math.atan2(e.shooterPos.y, e.shooterPos.x);
               const tgtAngle = Math.atan2(targetRack.y, targetRack.x);
               const curRadius = Math.hypot(e.shooterPos.x, e.shooterPos.y);
               const tgtRadius = Math.hypot(targetRack.x, targetRack.y);
               const angleDiff = tgtAngle - curAngle;
 
+              // Smooth sprint acceleration out of landing & plant-step deceleration into rack
+              const decelFactor = Math.max(0.28, Math.min(1, distToRack / 3.2));
+              const speedCurve = (0.45 + 0.55 * e.runBlend) * decelFactor;
+
               let nextX = e.shooterPos.x;
               let nextY = e.shooterPos.y;
 
-              if (Math.abs(angleDiff) < 1.35 && curRadius > 16 && tgtRadius > 16) {
-                // Sprint along the 3-point arc between adjacent racks
-                const runSpeedFt = 19.5;
+              if (Math.abs(angleDiff) < 1.35 && curRadius > 16 && tgtRadius > 16 && tgtRadius < 29 && curRadius < 29) {
+                // Sprint along the 3-point arc between adjacent perimeter racks
+                const runSpeedFt = 23.2 * speedCurve;
                 const arcStep = Math.min(distToRack, runSpeedFt * dt);
                 const angularStep = arcStep / Math.max(curRadius, 18);
                 const newAngle =
@@ -1579,8 +2914,8 @@ export default function App() {
                 nextX = Math.cos(newAngle) * newRadius;
                 nextY = Math.sin(newAngle) * newRadius;
               } else {
-                // Sprint directly across court (e.g. Right Corner wrap back to Left Corner in Heat Check)
-                const runSpeedFt = 24.5;
+                // Sprint directly across court (e.g. Right Corner to Half Court or Half Court back to Left Corner)
+                const runSpeedFt = (distToRack > 28 ? 33.0 : 28.0) * speedCurve;
                 const step = Math.min(distToRack, runSpeedFt * dt);
                 nextX = e.shooterPos.x + (dxRack / distToRack) * step;
                 nextY = e.shooterPos.y + (dyRack / distToRack) * step;
@@ -1591,43 +2926,69 @@ export default function App() {
               const stepDist = Math.hypot(moveDx, moveDy);
               e.shooterPos.x = nextX;
               e.shooterPos.y = nextY;
-              e.runPhase += stepDist * 1.48;
+              const prevRunPhase = e.runPhase;
+              e.runPhase += stepDist * 0.78;
 
               if (stepDist > 0.005) {
                 const vx = moveDx / stepDist;
                 const vy = moveDy / stepDist;
+                // Begin pivoting toward hoop during final 2.4 ft deceleration plant
+                const hdxTurn = e.hoopPos.x - e.shooterPos.x;
+                const hdyTurn = e.hoopPos.y - e.shooterPos.y;
+                const hLenTurn = Math.hypot(hdxTurn, hdyTurn) || 1;
+                const turnBlend = distToRack < 2.4 ? (2.4 - distToRack) / 2.4 : 0;
+                const desiredFx = vx * (1 - turnBlend * 0.72) + (hdxTurn / hLenTurn) * (turnBlend * 0.72);
+                const desiredFy = vy * (1 - turnBlend * 0.72) + (hdyTurn / hLenTurn) * (turnBlend * 0.72);
                 const turnLerp = 1 - Math.exp(-15 * dt);
-                e.shooterFacing.x += (vx - e.shooterFacing.x) * turnLerp;
-                e.shooterFacing.y += (vy - e.shooterFacing.y) * turnLerp;
+                e.shooterFacing.x += (desiredFx - e.shooterFacing.x) * turnLerp;
+                e.shooterFacing.y += (desiredFy - e.shooterFacing.y) * turnLerp;
                 const fl = Math.hypot(e.shooterFacing.x, e.shooterFacing.y) || 1;
                 e.shooterFacing.x /= fl;
                 e.shooterFacing.y /= fl;
 
-                // Subtle sneaker court scuff dust while sprinting
-                e.runStepTimer -= dt;
-                if (e.runStepTimer <= 0) {
-                  e.runStepTimer = 0.14;
-                  e.particles.push({
-                    x: e.shooterPos.x - vx * 0.35 + (Math.random() - 0.5) * 0.25,
-                    y: e.shooterPos.y - vy * 0.35 + (Math.random() - 0.5) * 0.25,
-                    z: 0.12,
-                    vx: -vx * 1.4 + (Math.random() - 0.5) * 0.6,
-                    vy: -vy * 1.4 + (Math.random() - 0.5) * 0.6,
-                    vz: 0.9 + Math.random() * 0.6,
-                    life: 0.28,
-                    maxLife: 0.28,
-                    size: 0.55,
-                    color: 'rgba(244, 239, 230, 0.55)',
-                    gravity: 2.5,
-                  });
+                // Sneaker court scuff dust puffs + tactile footstep synced to actual foot-strike zero crossings
+                const prevSin = Math.sin(prevRunPhase);
+                const curSin = Math.sin(e.runPhase);
+                const footStrikeSide =
+                  prevSin <= 0 && curSin > 0 ? 1 : prevSin >= 0 && curSin < 0 ? -1 : 0;
+                if (footStrikeSide !== 0) {
+                  triggerFootstepHaptic();
+                  const latX = -vy * footStrikeSide * 0.42;
+                  const latY = vx * footStrikeSide * 0.42;
+                  for (let puff = 0; puff < 2; puff++) {
+                    e.particles.push({
+                      x: e.shooterPos.x + latX - vx * 0.25 + (Math.random() - 0.5) * 0.22,
+                      y: e.shooterPos.y + latY - vy * 0.25 + (Math.random() - 0.5) * 0.22,
+                      z: 0.1,
+                      vx: -vx * (1.2 + puff * 0.6) + (Math.random() - 0.5) * 0.8,
+                      vy: -vy * (1.2 + puff * 0.6) + (Math.random() - 0.5) * 0.8,
+                      vz: 0.75 + Math.random() * 0.65,
+                      life: 0.26,
+                      maxLife: 0.26,
+                      size: 0.48 + puff * 0.16,
+                      color: 'rgba(244, 239, 230, 0.52)',
+                      gravity: 2.6,
+                    });
+                  }
                 }
               }
-            } else {
+            } else if (distToRack <= 0.12) {
+              const wasMoving = e.isMovingToRack;
               e.shooterPos.x = targetRack.x;
               e.shooterPos.y = targetRack.y;
               e.isMovingToRack = false;
+              if (wasMoving) {
+                e.landingSquat = Math.max(e.landingSquat, 0.38);
+                e.ballPickupTimer = Math.max(e.ballPickupTimer, 0.18);
+                triggerRackArrivalHaptic();
+              }
+              e.runBlend = Math.max(0, e.runBlend - dt * 12);
               if (!e.isHoldingShot && e.shooterZ <= 0.05) {
+                const prevStamina = e.stamina;
                 e.stamina = Math.min(100, e.stamina + 10.5 * dt);
+                if (e.phase === 'PLAYING') {
+                  e.staminaRecoveredMovement += e.stamina - prevStamina;
+                }
               }
 
               // Turn smoothly back toward hoop upon planting feet at the rack
@@ -1641,52 +3002,135 @@ export default function App() {
               e.shooterFacing.x /= fl;
               e.shooterFacing.y /= fl;
 
-              if (e.gatherBuffered && e.rackMoveTimer <= 0 && e.gatherCooldown <= 0) {
+              if (
+                e.gatherBuffered &&
+                e.rackMoveTimer <= 0 &&
+                e.sprintDelayTimer <= 0 &&
+                e.gatherCooldown <= 0 &&
+                e.shooterZ <= 0.06 &&
+                e.runBlend <= 0.14
+              ) {
                 beginShotGather();
               }
+            } else {
+              // Waiting for follow-through / jump landing before taking off into sprint
+              e.isMovingToRack = false;
+              e.runBlend = Math.max(0, e.runBlend - dt * 10);
             }
 
-            // Dynamic over-the-shoulder camera tracks runner + shifted hoop cleanly
-            const camFollowRate = e.isMovingToRack ? 5.0 : 6.5;
-            const camLerp = 1 - Math.exp(-camFollowRate * dt);
-            const curSDist = Math.hypot(e.shooterPos.x, e.shooterPos.y) || 1;
-            const sux = -e.shooterPos.x / curSDist;
-            const suy = -e.shooterPos.y / curSDist;
-            const srx = suy;
-            const sry = -sux;
-            const desiredCamX = e.isMovingToRack
-              ? e.shooterPos.x - sux * 8.8 + srx * 1.15
-              : targetRack.camPos.x;
-            const desiredCamY = e.isMovingToRack
-              ? e.shooterPos.y - suy * 8.8 + sry * 1.15
-              : targetRack.camPos.y;
-
-            e.camera.pos.x += (desiredCamX - e.camera.pos.x) * camLerp;
-            e.camera.pos.y += (desiredCamY - e.camera.pos.y) * camLerp;
-            e.camera.pos.z +=
-              (targetRack.camPos.z + e.shooterZ * 0.42 - e.camera.pos.z) * camLerp;
-
-            const desiredTargetX = targetRack.camTarget.x + (e.hoopPos.x - HOOP_POS.x) * 0.65;
-            const desiredTargetY = targetRack.camTarget.y + (e.hoopPos.y - HOOP_POS.y) * 0.65;
-            const desiredTargetZ = targetRack.camTarget.z + (e.hoopPos.z - HOOP_POS.z) * 0.65;
-            e.camera.target.x += (desiredTargetX - e.camera.target.x) * camLerp;
-            e.camera.target.y += (desiredTargetY - e.camera.target.y) * camLerp;
-            e.camera.target.z += (desiredTargetZ - e.camera.target.z) * camLerp;
-
-            if (e.cameraSnapZoom > 0) {
-              e.cameraSnapZoom = Math.max(0, e.cameraSnapZoom - dt * 1.45);
+            // Update explicit shooter animation state & dribbling blend
+            const hasPendingRackBall =
+              e.phase === 'COUNTDOWN' ||
+              (e.phase === 'PLAYING' &&
+                !e.contestShootingClosed &&
+                e.currentBall < getRackBallCount(e.currentRack));
+            if (e.isMovingToRack || e.runBlend > 0.14) {
+              e.shooterAnimState = 'RUNNING';
+            } else if (e.isHoldingShot || e.gatherAmount > 0.05) {
+              e.shooterAnimState = 'GATHER';
+            } else if (e.shooterZ > 0.08 && e.followThroughAmount > 0.45) {
+              e.shooterAnimState = 'RELEASE';
+            } else if (e.followThroughAmount > 0.08) {
+              e.shooterAnimState = 'FOLLOW_THROUGH';
+            } else if (e.landingSquat > 0.08) {
+              e.shooterAnimState = 'LANDING';
+            } else if (e.ballPickupTimer > 0.02) {
+              e.shooterAnimState = 'PICKUP';
+            } else {
+              e.shooterAnimState = 'DRIBBLING';
             }
-            const snapBoost =
-              e.cameraSnapZoom > 0 ? Math.pow(e.cameraSnapZoom, 0.45) * 0.135 : 0;
-            const targetFocal = 1.0 + snapBoost;
-            const focalRate = targetFocal > e.camera.focalLength ? 28 : 7.5;
-            const focalLerp = 1 - Math.exp(-focalRate * dt);
-            e.camera.focalLength += (targetFocal - e.camera.focalLength) * focalLerp;
 
-            if (e.isHoldingShot && e.phase === 'PLAYING' && !e.contestShootingClosed) {
-              const diff = getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina);
+            if (e.shooterAnimState === 'DRIBBLING' && hasPendingRackBall) {
+              e.dribbleBlend = Math.min(1, e.dribbleBlend + dt * 8.5);
+            } else {
+              e.dribbleBlend = Math.max(0, e.dribbleBlend - dt * 13);
+            }
+
+            // Dynamic camera: 15-sec cinematic court & ball-racks sweep in PVP pre-match intro,
+            // or dynamic over-the-shoulder shooter tracking during live play
+            if (e.mode === 'PVP' && e.phase === 'COUNTDOWN') {
+              e.pvpIntroElapsed = Math.min(15, e.pvpIntroElapsed + dt);
+              const cinematicCam = computePvpIntroCamera(e.pvpIntroElapsed);
+              const introLerp = 1 - Math.exp(-8.5 * dt);
+              e.camera.pos.x += (cinematicCam.pos.x - e.camera.pos.x) * introLerp;
+              e.camera.pos.y += (cinematicCam.pos.y - e.camera.pos.y) * introLerp;
+              e.camera.pos.z += (cinematicCam.pos.z - e.camera.pos.z) * introLerp;
+              e.camera.target.x += (cinematicCam.target.x - e.camera.target.x) * introLerp;
+              e.camera.target.y += (cinematicCam.target.y - e.camera.target.y) * introLerp;
+              e.camera.target.z += (cinematicCam.target.z - e.camera.target.z) * introLerp;
+              e.camera.focalLength += (cinematicCam.focalLength - e.camera.focalLength) * introLerp;
+            } else if (e.cameraMode === 'PRO_STATIC') {
+              const staticRig = computeRackCameraRig(targetRack, 'PRO_STATIC', {
+                x: e.hoopPos.x - HOOP_POS.x,
+                y: e.hoopPos.y - HOOP_POS.y,
+                z: e.hoopPos.z - HOOP_POS.z,
+              });
+              const staticLerp = 1 - Math.exp(-16.0 * dt);
+              e.camera.pos.x += (staticRig.pos.x - e.camera.pos.x) * staticLerp;
+              e.camera.pos.y += (staticRig.pos.y - e.camera.pos.y) * staticLerp;
+              e.camera.pos.z += (staticRig.pos.z - e.camera.pos.z) * staticLerp;
+              e.camera.target.x += (staticRig.target.x - e.camera.target.x) * staticLerp;
+              e.camera.target.y += (staticRig.target.y - e.camera.target.y) * staticLerp;
+              e.camera.target.z += (staticRig.target.z - e.camera.target.z) * staticLerp;
+              e.cameraSnapZoom = 0;
+              e.camera.focalLength += (staticRig.focalLength - e.camera.focalLength) * staticLerp;
+            } else {
+              const camFollowRate = e.isMovingToRack ? 5.0 : 6.5;
+              const camLerp = 1 - Math.exp(-camFollowRate * dt);
+              const curSDist = Math.hypot(e.shooterPos.x, e.shooterPos.y) || 1;
+              const sux = -e.shooterPos.x / curSDist;
+              const suy = -e.shooterPos.y / curSDist;
+              const srx = suy;
+              const sry = -sux;
+              const desiredCamX = e.isMovingToRack
+                ? e.shooterPos.x - sux * 8.8 + srx * 1.15
+                : targetRack.camPos.x;
+              const desiredCamY = e.isMovingToRack
+                ? e.shooterPos.y - suy * 8.8 + sry * 1.15
+                : targetRack.camPos.y;
+
+              e.camera.pos.x += (desiredCamX - e.camera.pos.x) * camLerp;
+              e.camera.pos.y += (desiredCamY - e.camera.pos.y) * camLerp;
+              e.camera.pos.z +=
+                (targetRack.camPos.z + e.shooterZ * 0.42 - e.camera.pos.z) * camLerp;
+
+              const desiredTargetX = targetRack.camTarget.x + (e.hoopPos.x - HOOP_POS.x) * 0.65;
+              const desiredTargetY = targetRack.camTarget.y + (e.hoopPos.y - HOOP_POS.y) * 0.65;
+              const desiredTargetZ = targetRack.camTarget.z + (e.hoopPos.z - HOOP_POS.z) * 0.65;
+              e.camera.target.x += (desiredTargetX - e.camera.target.x) * camLerp;
+              e.camera.target.y += (desiredTargetY - e.camera.target.y) * camLerp;
+              e.camera.target.z += (desiredTargetZ - e.camera.target.z) * camLerp;
+
+              if (e.cameraSnapZoom > 0) {
+                e.cameraSnapZoom = Math.max(0, e.cameraSnapZoom - dt * 1.45);
+              }
+              const snapBoost =
+                e.cameraSnapZoom > 0 ? Math.pow(e.cameraSnapZoom, 0.45) * 0.135 : 0;
+              const targetFocal = 1.0 + snapBoost;
+              const focalRate = targetFocal > e.camera.focalLength ? 28 : 7.5;
+              const focalLerp = 1 - Math.exp(-focalRate * dt);
+              e.camera.focalLength += (targetFocal - e.camera.focalLength) * focalLerp;
+            }
+
+            if (
+              e.isHoldingShot &&
+              e.phase === 'PLAYING' &&
+              !e.contestShootingClosed &&
+              !e.isMovingToRack &&
+              distToRack <= 0.16
+            ) {
+              const diff =
+                e.mode === 'PRACTICE'
+                  ? DIFFICULTY_TIERS[0]
+                  : getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina);
               e.meterValue += diff.meterSpeed * dt;
               e.gatherAmount = Math.min(1, e.meterValue / METER_PERFECT_CENTER);
+              const perfStart = METER_PERFECT_CENTER - diff.perfectHalfWindow;
+              const perfEnd = METER_PERFECT_CENTER + diff.perfectHalfWindow;
+              if (!e.perfectZoneHapticFired && e.meterValue >= perfStart && e.meterValue <= perfEnd) {
+                e.perfectZoneHapticFired = true;
+                triggerPerfectZoneCueHaptic();
+              }
               if (e.meterValue >= 1.07) {
                 releaseShot();
               }
@@ -1694,20 +3138,26 @@ export default function App() {
               e.gatherAmount = Math.max(0, e.gatherAmount - dt * 6);
             }
 
-            // Update Wind Simulation (intensity climbs smoothly with player streak)
-            const baseMph = e.streak === 0 ? 0.45 : Math.min(8.5, 0.9 + e.streak * 0.82);
-            const gust = Math.sin(e.clockTime * 1.35) * (e.streak >= 3 ? 0.45 : 0.15);
-            const targetMph = Math.max(0.3, Math.min(8.8, baseMph + gust));
-            e.windMph += (targetMph - e.windMph) * (1 - Math.exp(-3.2 * dt));
-            e.windShiftTimer -= dt;
-            if (e.windShiftTimer <= 0) {
-              e.windShiftTimer = 6.5 + Math.random() * 3.5;
-              e.windTargetAngle += (Math.random() - 0.5) * 1.8;
+            // Update Wind Simulation (calm in Practice; climbs smoothly with streak otherwise)
+            if (e.mode === 'PRACTICE') {
+              e.windMph = 0;
+              e.windVec.x = 0;
+              e.windVec.y = 0;
+            } else {
+              const baseMph = e.streak === 0 ? 0.45 : Math.min(8.5, 0.9 + e.streak * 0.82);
+              const gust = Math.sin(e.clockTime * 1.35) * (e.streak >= 3 ? 0.45 : 0.15);
+              const targetMph = Math.max(0.3, Math.min(8.8, baseMph + gust));
+              e.windMph += (targetMph - e.windMph) * (1 - Math.exp(-3.2 * dt));
+              e.windShiftTimer -= dt;
+              if (e.windShiftTimer <= 0) {
+                e.windShiftTimer = 6.5 + Math.random() * 3.5;
+                e.windTargetAngle += (Math.random() - 0.5) * 1.8;
+              }
+              e.windAngle += (e.windTargetAngle - e.windAngle) * (1 - Math.exp(-1.6 * dt));
+              const windAccel = e.windMph * 0.044;
+              e.windVec.x = Math.cos(e.windAngle) * windAccel;
+              e.windVec.y = Math.sin(e.windAngle) * windAccel;
             }
-            e.windAngle += (e.windTargetAngle - e.windAngle) * (1 - Math.exp(-1.6 * dt));
-            const windAccel = e.windMph * 0.044;
-            e.windVec.x = Math.cos(e.windAngle) * windAccel;
-            e.windVec.y = Math.sin(e.windAngle) * windAccel;
 
             // Step Basketballs
             for (const ball of e.activeBalls) {
@@ -1719,9 +3169,28 @@ export default function App() {
                 {
                 onRimHit: (b, impact) => {
                   if (b.isRemote) return;
+                  if (!b.rimHitTimes) b.rimHitTimes = [];
+                  b.rimHitTimes.push(b.age);
                   soundEngine.playRimClank(Math.min(1.4, impact / 10));
-                  e.rimShake = Math.min(1, e.rimShake + 0.65);
-                  e.screenShake = Math.min(0.45, e.screenShake + 0.14);
+                  triggerRimHitHaptic(impact);
+                  e.rimShake = Math.min(1, e.rimShake + (b.rimHang ? 0.35 : 0.65));
+                  e.screenShake = Math.min(0.45, e.screenShake + (b.rimHang ? 0.06 : 0.14));
+                },
+                onRimHangStart: (b) => {
+                  if (b.isRemote) return;
+                  triggerRimHangHaptic();
+                  addCallout(
+                    e,
+                    'RIM HANG...',
+                    '#FEF08A',
+                    {
+                      x: e.hoopPos.x,
+                      y: e.hoopPos.y + (BACKBOARD_Y - HOOP_POS.y) - 0.45,
+                      z: e.hoopPos.z + (BACKBOARD_TOP_Z - HOOP_POS.z) + 0.9,
+                    },
+                    'HOLD YOUR BREATH',
+                    true
+                  );
                 },
                 onBackboardHit: (b) => {
                   if (b.isRemote) return;
@@ -1733,7 +3202,7 @@ export default function App() {
                     return;
                   }
 
-                  const slotIdx = b.rackIndex * BALLS_PER_RACK + b.ballIndex;
+                  const slotIdx = getSlotIndex(b.rackIndex, b.ballIndex);
                   const slot = e.ballsRecord[slotIdx];
                   const prevDiff = getDifficultyForStreak(e.streak);
 
@@ -1752,27 +3221,33 @@ export default function App() {
                   if (b.isMoney) e.moneyMadeCount += 1;
 
                   const prevAllTimeBest = e.career.allTimeBestStreak;
-                  e.career.totalShotsMade += 1;
-                  e.career.totalShotsAttempted += 1;
-                  e.career.totalCareerScore += pointsEarned;
-                  if (e.streak > e.career.allTimeBestStreak) {
-                    e.career.allTimeBestStreak = e.streak;
-                  }
-                  if (e.score > e.bestScore) {
-                    e.bestScore = e.score;
-                    e.career.bestScore = e.score;
-                    e.isNewBest = true;
-                  }
-                  persistCareer(e.career);
+                  if (e.mode !== 'PRACTICE') {
+                    if (e.score > e.sessionBestScore) e.sessionBestScore = e.score;
+                    if (e.bestStreak > e.sessionBestStreak) e.sessionBestStreak = e.bestStreak;
+                    e.career.totalShotsMade += 1;
+                    e.career.totalShotsAttempted += 1;
+                    e.career.totalSwishTrackedAttempts += 1;
+                    if (isCleanSwish) e.career.totalSwishes += 1;
+                    e.career.totalCareerScore += pointsEarned;
+                    if (e.streak > e.career.allTimeBestStreak) {
+                      e.career.allTimeBestStreak = e.streak;
+                    }
+                    if (e.score > e.bestScore) {
+                      e.bestScore = e.score;
+                      e.career.bestScore = e.score;
+                      e.isNewBest = true;
+                    }
+                    persistCareer(e.career);
 
-                  if (!e.recordBrokenThisRun && e.streak > e.streakRecordBaseline) {
-                    e.recordBrokenThisRun = true;
-                    triggerRecordStreakCrowdReaction(
-                      e,
-                      e.streak,
-                      prevAllTimeBest,
-                      b.rackIndex
-                    );
+                    if (!e.recordBrokenThisRun && e.streak > e.streakRecordBaseline) {
+                      e.recordBrokenThisRun = true;
+                      triggerRecordStreakCrowdReaction(
+                        e,
+                        e.streak,
+                        prevAllTimeBest,
+                        b.rackIndex
+                      );
+                    }
                   }
 
                   if (slot) {
@@ -1780,6 +3255,12 @@ export default function App() {
                     slot.outcome = isCleanSwish ? 'SWISH' : 'MAKE';
                     slot.pointsAwarded = pointsEarned;
                     slot.multiplierUsed = activeMult;
+                  }
+                  const chartMake = e.shotChart.find((entry) => entry.id === b.id);
+                  if (chartMake) {
+                    chartMake.status = 'MADE';
+                    chartMake.isSwish = isCleanSwish;
+                    chartMake.pointsAwarded = pointsEarned;
                   }
 
                   if (e.mode === 'PVP') {
@@ -1791,6 +3272,13 @@ export default function App() {
                   e.screenShake = Math.min(0.5, e.screenShake + (b.isMoney ? 0.25 : 0.12));
 
                   soundEngine.playSwish(b.isMoney, e.streak, isCleanSwish, b.rackIndex);
+                  if (isCleanSwish || b.isMoney || b.isBuzzerBeater) {
+                    triggerSwishHaptic(
+                      b.timingQualityAtRelease === 'PERFECT',
+                      b.isMoney,
+                      b.isBuzzerBeater
+                    );
+                  }
                   spawnParticles(
                     e,
                     { x: e.hoopPos.x, y: e.hoopPos.y, z: e.hoopPos.z - 0.5 },
@@ -1801,11 +3289,13 @@ export default function App() {
 
                   const label = b.isBuzzerBeater
                     ? `BUZZER BEATER! +${pointsEarned}`
-                    : b.isMoney
-                      ? `MONEY BALL! +${pointsEarned}`
-                      : isCleanSwish
-                        ? `SWISH! +${pointsEarned}`
-                        : `GOOD! +${pointsEarned}`;
+                    : b.hadRimHang
+                      ? `SHOOTER’S ROLL! +${pointsEarned}`
+                      : b.isMoney
+                        ? `MONEY BALL! +${pointsEarned}`
+                        : isCleanSwish
+                          ? `SWISH! +${pointsEarned}`
+                          : `GOOD! +${pointsEarned}`;
                   const sub =
                     activeMult > 1
                       ? `${activeMult}x MULTIPLIER · NEXT ${e.multiplier}x`
@@ -1813,33 +3303,60 @@ export default function App() {
                   addCallout(
                     e,
                     label,
-                    b.isMoney ? '#F59E0B' : isCleanSwish ? '#34D399' : '#F4EFE6',
-                    { x: e.hoopPos.x, y: e.hoopPos.y, z: e.hoopPos.z + 2.1 },
-                    sub
+                    b.isMoney ? '#FEF08A' : isCleanSwish ? '#6EE7B7' : '#FFFFFF',
+                    {
+                      x: e.hoopPos.x,
+                      y: e.hoopPos.y + (BACKBOARD_Y - HOOP_POS.y) - 0.45,
+                      z: e.hoopPos.z + (BACKBOARD_TOP_Z - HOOP_POS.z) + 0.9,
+                    },
+                    sub,
+                    true
                   );
 
                   const nextDiff = getDifficultyForStreak(e.streak);
-                  if (nextDiff.level > prevDiff.level) {
+                  if (e.mode !== 'PRACTICE' && nextDiff.level > prevDiff.level) {
                     soundEngine.playDifficultyUp(nextDiff.level);
                     addCallout(
                       e,
                       `${nextDiff.label.toUpperCase()}!`,
-                      '#F9631C',
+                      '#FDBA74',
                       { x: e.shooterPos.x, y: e.shooterPos.y, z: 9.2 },
                       `DIFFICULTY LV.${nextDiff.level} · FASTER METER`
                     );
                   }
 
+                  const priorityScore =
+                    (b.isBuzzerBeater ? 1000 : 0) +
+                    (b.hadRimHang ? 700 : 0) +
+                    pointsEarned * 18 +
+                    (isCleanSwish ? 120 : 0) +
+                    (b.timingQualityAtRelease === 'PERFECT' ? 90 : 0) +
+                    e.streak * 25 +
+                    (b.isMoney ? 80 : 0);
+                  b.highlightScoreAtTime = b.age;
+                  b.highlightMeta = {
+                    pointsAwarded: pointsEarned,
+                    multiplier: activeMult,
+                    streakAtMake: e.streak,
+                    isCleanSwish,
+                    priorityScore,
+                  };
+
                   syncHud();
                 },
                 onMiss: (b) => {
                   if (b.isRemote) return;
-                  const slotIdx = b.rackIndex * BALLS_PER_RACK + b.ballIndex;
+                  const slotIdx = getSlotIndex(b.rackIndex, b.ballIndex);
                   const slot = e.ballsRecord[slotIdx];
                   if (slot) {
                     slot.status = 'MISSED';
                     slot.outcome = b.intendedOutcome;
                     slot.pointsAwarded = 0;
+                  }
+                  const chartMiss = e.shotChart.find((entry) => entry.id === b.id);
+                  if (chartMiss) {
+                    chartMiss.status = 'MISSED';
+                    chartMiss.pointsAwarded = 0;
                   }
 
                   const prevStreak = e.streak;
@@ -1849,12 +3366,17 @@ export default function App() {
                   e.streakRecordBaseline = Math.max(2, e.career.allTimeBestStreak);
                   e.multiplier = 1;
                   e.resolvedLocalCount += 1;
-                  e.career.totalShotsAttempted += 1;
-                  persistCareer(e.career);
+                  if (e.mode !== 'PRACTICE') {
+                    e.career.totalShotsAttempted += 1;
+                    e.career.totalSwishTrackedAttempts += 1;
+                    persistCareer(e.career);
+                  }
 
                   if (e.mode === 'PVP') {
                     pvpClient.sendShotResolved(b.rackIndex, b.ballIndex, false, false);
                   }
+
+                  triggerMissHaptic(hadStreak || e.mode === 'HEAT_CHECK');
 
                   if (e.mode === 'HEAT_CHECK') {
                     e.contestShootingClosed = true;
@@ -1863,28 +3385,60 @@ export default function App() {
                     e.gatherAmount = 0;
                     e.finishGraceTimer = 0.72;
                     soundEngine.playCrowdGroan(b.rackIndex, prevStreak);
+                    triggerBuzzerHaptic();
                     addCallout(
                       e,
                       'HEAT CHECK ENDED!',
-                      '#EF4444',
-                      { x: e.hoopPos.x, y: e.hoopPos.y, z: e.hoopPos.z + 1.9 },
-                      prevStreak > 0 ? `FINAL STREAK: ${prevStreak}` : 'STREAK ENDED ON MISS'
+                      '#FECACA',
+                      {
+                        x: e.hoopPos.x,
+                        y: e.hoopPos.y + (BACKBOARD_Y - HOOP_POS.y) - 0.45,
+                        z: e.hoopPos.z + (BACKBOARD_TOP_Z - HOOP_POS.z) + 0.9,
+                      },
+                      prevStreak > 0 ? `FINAL STREAK: ${prevStreak}` : 'STREAK ENDED ON MISS',
+                      true
                     );
                   } else if (hadStreak) {
                     soundEngine.playCrowdGroan(b.rackIndex, prevStreak);
                     addCallout(
                       e,
                       'STREAK BROKEN',
-                      '#EF4444',
-                      { x: e.hoopPos.x, y: e.hoopPos.y, z: e.hoopPos.z + 1.8 },
-                      'MULTIPLIER RESET TO 1x'
+                      '#FECACA',
+                      {
+                        x: e.hoopPos.x,
+                        y: e.hoopPos.y + (BACKBOARD_Y - HOOP_POS.y) - 0.45,
+                        z: e.hoopPos.z + (BACKBOARD_TOP_Z - HOOP_POS.z) + 0.9,
+                      },
+                      'MULTIPLIER RESET TO 1x',
+                      true
                     );
                   }
                   syncHud();
                 },
               }, e.windVec, e.hoopPos);
 
-              if (!ball.isRemote && !wasResolved && ball.age < 1.85) {
+              if (!ball.isRemote && ball.highlightFrames && ball.age <= 3.6) {
+                ball.highlightFrames.push({
+                  t: ball.age,
+                  x: ball.pos.x,
+                  y: ball.pos.y,
+                  z: ball.pos.z,
+                  spinAngle: ball.spinAngle,
+                });
+              }
+
+              if (
+                !ball.isRemote &&
+                e.mode !== 'PRACTICE' &&
+                !ball.highlightSaved &&
+                ball.hasScored &&
+                ball.highlightScoreAtTime !== undefined &&
+                (ball.age - ball.highlightScoreAtTime >= 0.65 || ball.age >= 3.5)
+              ) {
+                tryCommitBallHighlight(e, ball);
+              }
+
+              if (!ball.isRemote && !wasResolved && (ball.age < 1.85 || Boolean(ball.rimHang))) {
                 const shotStreak =
                   ball.streakAtRelease ?? Math.max(0, ball.multiplierAtRelease - 1);
                 if (shotStreak >= 3) {
@@ -1893,11 +3447,11 @@ export default function App() {
               }
             }
 
-            e.activeBalls = e.activeBalls.filter((b) => b.age < 3.2);
+            e.activeBalls = e.activeBalls.filter((b) => b.age < 4.6);
 
-            // End-of-contest transition for Solo & Heat Check (PVP ends via server match_state)
+            // End-of-contest transition for Solo, Fast-Break & Heat Check (PVP ends via server match_state)
             if (
-              (e.mode === 'SOLO' || e.mode === 'HEAT_CHECK') &&
+              (e.mode === 'SOLO' || e.mode === 'FAST_BREAK' || e.mode === 'HEAT_CHECK') &&
               e.phase === 'PLAYING' &&
               e.contestShootingClosed
             ) {
@@ -1905,12 +3459,33 @@ export default function App() {
               if (!unresolved) {
                 e.finishGraceTimer -= dt;
                 if (e.finishGraceTimer <= 0) {
+                  finalizeContestHighlights(e);
                   e.phase = 'GAME_OVER';
                   e.gameOverTimestamp = performance.now();
                   if (!e.contestCountedInCareer) {
                     e.contestCountedInCareer = true;
                     e.career.contestsPlayed += 1;
+                    e.career.totalBestStreakSum += e.bestStreak;
+                    e.career.streakTrackedContests += 1;
                     persistCareer(e.career);
+                    if (userProfileRef.current) {
+                      void syncCourtRankingToFirestore(
+                        userProfileRef.current.uid,
+                        userProfileRef.current.username,
+                        e.courtTheme,
+                        e.score,
+                        e.bestStreak,
+                        e.swishCount
+                      )
+                        .then(() => setCourtRankingsRefreshNonce((n) => n + 1))
+                        .catch((err: unknown) => {
+                          console.error('Failed to sync local court ranking:', err);
+                        });
+                    }
+                  }
+                  if (e.instantReplayEnabled && e.bestContestHighlight) {
+                    soundEngine.unlock();
+                    setActiveHighlight(e.bestContestHighlight);
                   }
                   syncHud();
                 }
@@ -1967,7 +3542,7 @@ export default function App() {
             }
           }
 
-          // Render frame
+          // Render live court frame
           ctx.save();
           ctx.scale(dpr, dpr);
           const renderState: RenderState = {
@@ -1979,16 +3554,25 @@ export default function App() {
             shooterZ: e.shooterZ,
             shooterFacing: e.shooterFacing,
             runPhase: e.runPhase,
+            runBlend: e.runBlend,
             isMovingToRack: e.isMovingToRack,
+            shooterAnimState: e.shooterAnimState,
+            dribbleBlend: e.dribbleBlend,
             gatherAmount: e.gatherAmount,
             followThroughAmount: e.followThroughAmount,
+            landingSquat: e.landingSquat,
+            ballPickupBlend:
+              e.ballPickupTimer > 0 ? Math.sin((e.ballPickupTimer / 0.18) * Math.PI) : 0,
             isHoldingShot: e.isHoldingShot,
             meterValue: e.meterValue,
             meterFeedbackTimer: e.meterFeedbackTimer,
             lastReleaseMeter: e.lastReleaseMeter,
             lastReleaseLabel: e.lastReleaseLabel,
             lastReleaseColor: e.lastReleaseColor,
-            difficulty: getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina),
+            difficulty:
+              e.mode === 'PRACTICE'
+                ? DIFFICULTY_TIERS[0]
+                : getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina),
             streak: e.streak,
             multiplier: e.multiplier,
             currentRack: e.currentRack,
@@ -1996,23 +3580,33 @@ export default function App() {
             moneyRack: e.moneyRack,
             ballsRecord: e.ballsRecord,
             activeBalls: e.activeBalls,
-            opponentGhost: e.mode === 'PVP' ? e.opponentGhost : null,
+            opponentGhost: null,
             particles: e.particles,
             callouts: e.callouts,
             flashbulbs: e.flashbulbs,
             netWhip: e.netWhip,
             netWhipPhase: e.netWhipPhase,
             rimShake: e.rimShake,
-            screenShake: e.screenShake,
+            screenShake: e.cameraMode === 'PRO_STATIC' ? 0 : e.screenShake,
             clockTime: e.clockTime,
             timeLeft: e.timeLeft,
             hasShotAnyBall: e.hasShotAnyBall,
             shooterName: playerNameRef.current,
+            shooterLabelAlpha: e.shooterLabelAlpha,
             crowdHypeTimer: e.crowdHypeTimer,
             crowdHypeDuration: e.crowdHypeDuration,
+            stamina: e.stamina,
+            courtTheme: e.courtTheme,
+            sessionBestScore: e.sessionBestScore,
+            sessionBestStreak: e.sessionBestStreak,
           };
           renderArena(ctx, rect.width, rect.height, renderState);
           ctx.restore();
+          arenaRenderedFramesRef.current += 1;
+          if (!arenaReadyMarkedRef.current && arenaRenderedFramesRef.current >= 2) {
+            arenaReadyMarkedRef.current = true;
+            setLoadingChecklist((prev) => (prev.arenaReady ? prev : { ...prev, arenaReady: true }));
+          }
         }
       }
 
@@ -2024,157 +3618,712 @@ export default function App() {
   }, [beginShotGather, persistCareer, releaseShot, syncHud]);
 
   const handleCanvasPointerDown = (ev: React.PointerEvent<HTMLCanvasElement>) => {
-    if (ev.button !== 0) return;
+    if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+    soundEngine.unlock();
     const e = engineRef.current;
-    if (e.phase === 'COUNTDOWN' && (e.mode === 'SOLO' || e.mode === 'HEAT_CHECK')) {
+    if (
+      e.phase === 'COUNTDOWN' &&
+      (e.mode === 'SOLO' ||
+        e.mode === 'FAST_BREAK' ||
+        e.mode === 'HEAT_CHECK' ||
+        e.mode === 'PRACTICE')
+    ) {
       e.countdownTimer = 0;
       e.phase = 'PLAYING';
       soundEngine.playWhistle();
+      triggerMatchStartHaptic();
       syncHud();
       return;
     }
     if (e.phase === 'PLAYING') {
-      ev.currentTarget.setPointerCapture(ev.pointerId);
+      if (activeShotPointerIdRef.current !== null) return;
+      activeShotPointerIdRef.current = ev.pointerId;
+      try {
+        ev.currentTarget.setPointerCapture(ev.pointerId);
+      } catch {
+        // Safe fallback on WebKit/Android WebView environments where capture is unsupported
+      }
       beginShotGather();
     }
   };
 
-  const handleCanvasPointerUp = () => {
+  const handleCanvasPointerUp = (ev: React.PointerEvent<HTMLCanvasElement>) => {
+    if (
+      activeShotPointerIdRef.current !== null &&
+      ev.pointerId !== activeShotPointerIdRef.current
+    ) {
+      return;
+    }
+    activeShotPointerIdRef.current = null;
+    try {
+      if (ev.currentTarget.hasPointerCapture(ev.pointerId)) {
+        ev.currentTarget.releasePointerCapture(ev.pointerId);
+      }
+    } catch {
+      // Ignore pointer capture release errors
+    }
     releaseShot();
   };
 
   const waitingRoom =
     hud.pvpMatch && hud.pvpMatch.status === 'WAITING' ? hud.pvpMatch : null;
 
+  const exhaustionFactor =
+    hud.phase === 'PLAYING' && hud.stamina < STAMINA_EXHAUSTED_THRESHOLD
+      ? Math.max(
+          0,
+          Math.min(1, (STAMINA_EXHAUSTED_THRESHOLD - hud.stamina) / STAMINA_EXHAUSTED_THRESHOLD)
+        )
+      : 0;
+  const exhaustionBlurPx = exhaustionFactor > 0 ? 0.35 + exhaustionFactor * 1.15 : 0;
+
   return (
-    <main className="relative w-full h-full overflow-hidden bg-[#0B0E14]">
-      <canvas
-        ref={canvasRef}
-        onPointerDown={handleCanvasPointerDown}
-        onPointerUp={handleCanvasPointerUp}
-        onPointerCancel={handleCanvasPointerUp}
-        onContextMenu={(e) => e.preventDefault()}
-        className="block w-full h-full touch-none cursor-pointer"
-      />
-
-      {hud.phase === 'TITLE' && (
-        <TitleOverlay
-          mode={hud.mode}
-          moneyRack={hud.moneyRack}
-          career={hud.career}
-          muted={hud.muted}
-          wsConnected={wsConnected}
-          lobbyStats={lobbyStats}
-          playerName={playerName}
-          userProfile={userProfile}
-          inQueue={inQueue}
-          waitingRoom={waitingRoom}
-          pvpError={pvpError}
-          onSelectMode={handleSelectMode}
-          onSelectMoneyRack={handleSelectMoneyRack}
-          onChangePlayerName={handleChangePlayerName}
-          onToggleMute={handleToggleMute}
-          onOpenAuth={handleOpenAuth}
-          onSignOut={handleSignOut}
-          onStartSolo={() => startLocalContest('SOLO')}
-          onStartHeatCheck={() => startLocalContest('HEAT_CHECK')}
-          onJoinQueue={() => {
-            if (!userProfile) {
-              handleOpenAuth();
-              return;
-            }
-            soundEngine.unlock();
-            const c = engineRef.current.career;
-            pvpClient.setProfile(userProfile.username, engineRef.current.moneyRack, {
-              wins: c.pvpWins,
-              losses: c.pvpLosses,
-              draws: c.pvpDraws,
-            });
-            pvpClient.joinQueue();
-          }}
-          onLeaveQueue={() => pvpClient.leaveQueue()}
-          onCreateRoom={() => {
-            if (!userProfile) {
-              handleOpenAuth();
-              return;
-            }
-            soundEngine.unlock();
-            const c = engineRef.current.career;
-            pvpClient.setProfile(userProfile.username, engineRef.current.moneyRack, {
-              wins: c.pvpWins,
-              losses: c.pvpLosses,
-              draws: c.pvpDraws,
-            });
-            pvpClient.createRoom();
-          }}
-          onJoinRoom={(code) => {
-            if (!userProfile) {
-              handleOpenAuth();
-              return;
-            }
-            soundEngine.unlock();
-            const c = engineRef.current.career;
-            pvpClient.setProfile(userProfile.username, engineRef.current.moneyRack, {
-              wins: c.pvpWins,
-              losses: c.pvpLosses,
-              draws: c.pvpDraws,
-            });
-            pvpClient.joinRoom(code);
-          }}
-          onLeaveRoom={() => {
-            pvpClient.leaveRoom();
-            engineRef.current.pvpMatch = null;
-            syncHud();
-          }}
+    <main className="relative w-full h-full overflow-hidden bg-[#0b0c10]">
+      <div
+        className={`relative h-full transition-all duration-300 ${
+          hud.phase === 'TITLE'
+            ? 'w-full md:ml-[356px] md:w-[calc(100%-356px)] lg:ml-[368px] lg:w-[calc(100%-368px)] bg-[radial-gradient(circle_at_center,#1a1c23_0%,#0b0c10_100%)]'
+            : 'w-full bg-[#0b0c10]'
+        }`}
+      >
+        <canvas
+          ref={canvasRef}
+          onPointerDown={handleCanvasPointerDown}
+          onPointerUp={handleCanvasPointerUp}
+          onPointerCancel={handleCanvasPointerUp}
+          onContextMenu={(e) => e.preventDefault()}
+          style={
+            exhaustionBlurPx > 0
+              ? { filter: `blur(${exhaustionBlurPx.toFixed(2)}px)` }
+              : undefined
+          }
+          className={`block w-full h-full touch-none cursor-pointer transition-[filter,opacity] duration-300 ${
+            hud.phase === 'TITLE' ? 'opacity-65' : 'opacity-100'
+          }`}
         />
-      )}
+      </div>
 
-      {showAuthOverlay && hud.phase === 'TITLE' && (
-        <AuthPage
-          mode={firebaseUser && !userProfile ? 'USERNAME_SETUP' : 'AUTH'}
-          firebaseUser={firebaseUser}
-          career={hud.career}
-          onProfileReady={applyAuthenticatedProfile}
-          onContinueAsGuest={() => setShowAuthOverlay(false)}
-        />
-      )}
+      <AnimatePresence mode="wait">
+        {hud.phase === 'TITLE' && (
+          <TitleOverlay
+            key="title-overlay"
+            mode={hud.mode}
+            moneyRack={hud.moneyRack}
+            career={hud.career}
+            muted={hud.muted}
+            wsConnected={wsConnected}
+            lobbyStats={lobbyStats}
+            playerName={playerName}
+            userProfile={userProfile}
+            myPlayerId={hud.myPlayerId}
+            rivalries={hud.rivalries}
+            inQueue={inQueue}
+            waitingRoom={waitingRoom}
+            pvpError={pvpError}
+            courtTheme={hud.courtTheme}
+            lastHighlight={hud.lastHighlight}
+            activeLeague={activeLeague}
+            courtRankingsRefreshNonce={courtRankingsRefreshNonce}
+            friendsCount={friendships.filter((f) => f.status === 'ACCEPTED').length}
+            onlineFriendsCount={
+              friendships.filter(
+                (f) => f.status === 'ACCEPTED' && friendStatuses[f.friendUid] === 'ONLINE'
+              ).length
+            }
+            incomingFriendRequestsCount={
+              friendships.filter((f) => f.status === 'PENDING' && f.isIncoming).length
+            }
+            hasModalOpen={
+              showAuthOverlay ||
+              showEditUsername ||
+              showCourtLocker ||
+              showLeaguesModal ||
+              showFriendsModal ||
+              Boolean(activeHighlight)
+            }
+            onSelectMode={handleSelectMode}
+            onSelectMoneyRack={handleSelectMoneyRack}
+            onChangePlayerName={handleChangePlayerName}
+            onToggleMute={handleToggleMute}
+            onOpenAuth={handleOpenAuth}
+            onOpenEditUsername={() => setShowEditUsername(true)}
+            onOpenCourtLocker={() => setShowCourtLocker(true)}
+            onOpenHighlightReplay={() => {
+              if (hud.lastHighlight) {
+                soundEngine.unlock();
+                setActiveHighlight(hud.lastHighlight);
+              }
+            }}
+            onOpenLeagues={() => setShowLeaguesModal(true)}
+            onOpenFriends={() => setShowFriendsModal(true)}
+            onClearActiveLeague={() => setActiveLeague(null)}
+            onSignOut={handleSignOut}
+            onStartSolo={() => startLocalContest('SOLO')}
+            onStartFastBreak={() => startLocalContest('FAST_BREAK')}
+            onStartHeatCheck={() => startLocalContest('HEAT_CHECK')}
+            onStartPractice={() => startLocalContest('PRACTICE')}
+            onJoinQueue={() => {
+              if (!userProfile) {
+                handleOpenAuth();
+                return;
+              }
+              soundEngine.unlock();
+              const c = engineRef.current.career;
+              pvpClient.setProfile(
+                userProfile.username,
+                engineRef.current.moneyRack,
+                {
+                  wins: c.pvpWins,
+                  losses: c.pvpLosses,
+                  draws: c.pvpDraws,
+                },
+                userProfile.uid,
+                buildServerProfileStats(c)
+              );
+              pvpClient.joinQueue(activeLeague);
+            }}
+            onLeaveQueue={() => pvpClient.leaveQueue()}
+            onCreateRoom={() => {
+              if (!userProfile) {
+                handleOpenAuth();
+                return;
+              }
+              soundEngine.unlock();
+              const c = engineRef.current.career;
+              pvpClient.setProfile(
+                userProfile.username,
+                engineRef.current.moneyRack,
+                {
+                  wins: c.pvpWins,
+                  losses: c.pvpLosses,
+                  draws: c.pvpDraws,
+                },
+                userProfile.uid,
+                buildServerProfileStats(c)
+              );
+              pvpClient.createRoom(activeLeague);
+            }}
+            onJoinRoom={(code) => {
+              if (!userProfile) {
+                handleOpenAuth();
+                return;
+              }
+              soundEngine.unlock();
+              const c = engineRef.current.career;
+              pvpClient.setProfile(
+                userProfile.username,
+                engineRef.current.moneyRack,
+                {
+                  wins: c.pvpWins,
+                  losses: c.pvpLosses,
+                  draws: c.pvpDraws,
+                },
+                userProfile.uid,
+                buildServerProfileStats(c)
+              );
+              pvpClient.joinRoom(code);
+            }}
+            onLeaveRoom={() => {
+              pvpClient.leaveRoom();
+              engineRef.current.pvpMatch = null;
+              syncHud();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {hud.phase === 'TITLE' && inQueue && (
+          <FindingOpponentOverlay
+            key="finding-opponent"
+            playerName={userProfile ? `@${userProfile.username}` : playerName}
+            moneyRack={hud.moneyRack}
+            career={hud.career}
+            lobbyStats={lobbyStats}
+            leagueName={queuedLeagueInfo.leagueName ?? activeLeague?.name ?? null}
+            leagueId={queuedLeagueInfo.leagueId ?? activeLeague?.id ?? null}
+            onCancel={() => {
+              pvpClient.leaveQueue();
+              setInQueue(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showLeaguesModal && hud.phase === 'TITLE' && (
+          <LeaguesModal
+            key="pvp-leagues"
+            userProfile={userProfile}
+            activeLeague={activeLeague}
+            rivalries={hud.rivalries}
+            onSelectActiveLeague={setActiveLeague}
+            onOpenAuth={handleOpenAuth}
+            onClose={() => setShowLeaguesModal(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCourtLocker && hud.phase === 'TITLE' && (
+          <CourtLockerModal
+            key="court-locker"
+            selectedCourt={hud.courtTheme}
+            career={hud.career}
+            onSelectCourt={handleSelectCourt}
+            onPreviewChant={handlePreviewCourtChant}
+            onClose={() => setShowCourtLocker(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {showAuthOverlay &&
+        !loadingState.visible &&
+        (hud.phase === 'TITLE' || hud.phase === 'GAME_OVER') && (
+          <AuthPage
+            mode={
+              firebaseUser && !userProfile
+                ? profileLoadError
+                  ? 'PROFILE_ERROR'
+                  : 'USERNAME_SETUP'
+                : 'AUTH'
+            }
+            firebaseUser={firebaseUser}
+            career={hud.career}
+            profileSyncing={profileSyncing}
+            profileLoadError={profileLoadError}
+            onRetryProfileLoad={() => {
+              const current = auth.currentUser;
+              if (current) {
+                void syncUserProfileFromAuth(current);
+              }
+            }}
+            onProfileReady={applyAuthenticatedProfile}
+            onContinueAsGuest={() => setShowAuthOverlay(false)}
+          />
+        )}
+
+      <AnimatePresence>
+        {loadingState.visible && (
+          <LoadingScreen
+            key={`app-loading-${loadingRunId}`}
+            reason={loadingState.reason}
+            checklist={loadingChecklist}
+            onComplete={handleLoadingComplete}
+          />
+        )}
+      </AnimatePresence>
 
       {(hud.phase === 'COUNTDOWN' || hud.phase === 'PLAYING') && (
         <CrowdReactionOverlay reaction={hud.crowdReaction} />
       )}
 
       <AnimatePresence>
-        {(hud.phase === 'COUNTDOWN' || hud.phase === 'PLAYING' || hud.phase === 'PAUSED') && (
-          <GameHud
-            key="game-hud"
-            hud={hud}
-            onToggleMute={handleToggleMute}
-            onPause={handlePause}
+        {(hud.phase === 'COUNTDOWN' || hud.phase === 'PLAYING' || hud.phase === 'PAUSED') &&
+          !(hud.mode === 'PVP' && hud.phase === 'COUNTDOWN') && (
+            <GameHud
+              key="game-hud"
+              hud={hud}
+              onToggleMute={handleToggleMute}
+              onPause={handlePause}
+              onToggleInstantReplay={handleToggleInstantReplay}
+              onSkipInstantReplay={handleSkipInstantReplay}
+            />
+          )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {hud.mode === 'PVP' && hud.phase === 'COUNTDOWN' && hud.pvpMatch && (
+          <PvpIntroOverlay
+            key="pvp-intro-overlay"
+            match={hud.pvpMatch}
+            myPlayerId={hud.myPlayerId}
+            countdownSeconds={hud.countdownValue}
+            rivalry={(() => {
+              const opp = hud.pvpMatch.players.find((p) => p.id !== hud.myPlayerId);
+              if (!opp) return null;
+              return hud.rivalries.find((r) => r.opponentKey === normalizeOpponentKey(opp.name)) ?? null;
+            })()}
           />
         )}
       </AnimatePresence>
 
-      {hud.phase === 'PAUSED' && (
-        <PauseModal
-          mode={hud.mode}
-          muted={hud.muted}
-          onToggleMute={handleToggleMute}
-          onResume={handlePause}
-          onRestart={() => startLocalContest(hud.mode === 'HEAT_CHECK' ? 'HEAT_CHECK' : 'SOLO')}
-          onQuitToTitle={handleQuitToTitle}
-        />
-      )}
+      <AnimatePresence>
+        {hud.phase === 'PAUSED' && (
+          <PauseModal
+            key="pause-modal"
+            mode={hud.mode}
+            muted={hud.muted}
+            cameraMode={hud.cameraMode}
+            displayUsername={userProfile ? `@${userProfile.username}` : playerName}
+            onToggleMute={handleToggleMute}
+            onToggleCameraMode={handleToggleCameraMode}
+            onOpenEditUsername={() => setShowEditUsername(true)}
+            onResume={handlePause}
+            onRestart={() =>
+              startLocalContest(
+                hud.mode === 'FAST_BREAK'
+                  ? 'FAST_BREAK'
+                  : hud.mode === 'HEAT_CHECK'
+                    ? 'HEAT_CHECK'
+                    : hud.mode === 'PRACTICE'
+                      ? 'PRACTICE'
+                      : 'SOLO'
+              )
+            }
+            onQuitToTitle={handleQuitToTitle}
+          />
+        )}
+      </AnimatePresence>
 
-      {hud.phase === 'GAME_OVER' && (
-        <GameOverModal
-          hud={hud}
-          onPlayAgain={() =>
-            startLocalContest(hud.mode === 'HEAT_CHECK' ? 'HEAT_CHECK' : 'SOLO')
-          }
-          onRequestRematch={() => pvpClient.requestRematch()}
-          onBackToTitle={handleQuitToTitle}
-        />
-      )}
+      <AnimatePresence>
+        {showFriendsModal && (
+          <FriendsModal
+            key="friends-modal"
+            userProfile={userProfile}
+            wsConnected={wsConnected}
+            friendships={friendships}
+            friendStatuses={friendStatuses}
+            rivalries={hud.rivalries}
+            activeLeague={activeLeague}
+            outgoingInvite={outgoingInvite}
+            onAddFriendByUsername={async (targetUsername) => {
+              if (!userProfile) {
+                throw new Error('Sign in first to add friends.');
+              }
+              return sendFriendRequestByUsername(
+                userProfile.uid,
+                userProfile.username,
+                targetUsername
+              );
+            }}
+            onAcceptFriendRequest={async (pairId) => {
+              if (!userProfile) return;
+              await acceptFriendRequest(pairId, userProfile.username);
+            }}
+            onRemoveFriendship={async (pairId) => {
+              await declineOrRemoveFriendship(pairId);
+            }}
+            onSendMatchInvite={(targetUid, targetName, isRematch) => {
+              if (!userProfile) {
+                handleOpenAuth();
+                return;
+              }
+              soundEngine.unlock();
+              const c = engineRef.current.career;
+              pvpClient.setProfile(
+                userProfile.username,
+                engineRef.current.moneyRack,
+                {
+                  wins: c.pvpWins,
+                  losses: c.pvpLosses,
+                  draws: c.pvpDraws,
+                },
+                userProfile.uid,
+                buildServerProfileStats(c)
+              );
+              pvpClient.sendMatchInvite({
+                targetUid,
+                targetName,
+                isRematch,
+                leagueId: activeLeague?.id ?? null,
+                leagueName: activeLeague?.name ?? null,
+              });
+            }}
+            onCancelMatchInvite={(inviteId) => pvpClient.cancelMatchInvite(inviteId)}
+            onCreatePrivateRoom={() => {
+              if (!userProfile) {
+                handleOpenAuth();
+                return;
+              }
+              soundEngine.unlock();
+              const c = engineRef.current.career;
+              pvpClient.setProfile(
+                userProfile.username,
+                engineRef.current.moneyRack,
+                {
+                  wins: c.pvpWins,
+                  losses: c.pvpLosses,
+                  draws: c.pvpDraws,
+                },
+                userProfile.uid,
+                buildServerProfileStats(c)
+              );
+              handleSelectMode('PVP');
+              pvpClient.createRoom(activeLeague);
+            }}
+            onOpenAuth={handleOpenAuth}
+            onClose={() => setShowFriendsModal(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {hud.phase === 'GAME_OVER' && (
+          <GameOverModal
+            key="game-over-modal"
+            hud={hud}
+            playerName={userProfile ? `@${userProfile.username}` : playerName}
+            myUid={userProfile?.uid ?? null}
+            friendships={friendships}
+            friendStatuses={friendStatuses}
+            outgoingInvite={outgoingInvite}
+            onPlayAgain={() =>
+              startLocalContest(
+                hud.mode === 'FAST_BREAK'
+                  ? 'FAST_BREAK'
+                  : hud.mode === 'HEAT_CHECK'
+                    ? 'HEAT_CHECK'
+                    : hud.mode === 'PRACTICE'
+                      ? 'PRACTICE'
+                      : 'SOLO'
+              )
+            }
+            onRequestRematch={() => pvpClient.requestRematch()}
+            onAddFriend={async (targetUid, targetName) => {
+              if (!userProfile) {
+                handleOpenAuth();
+                return;
+              }
+              await sendFriendRequest(
+                userProfile.uid,
+                userProfile.username,
+                targetUid,
+                targetName
+              );
+            }}
+            onAcceptFriend={async (pairId) => {
+              if (!userProfile) return;
+              await acceptFriendRequest(pairId, userProfile.username);
+            }}
+            onSendMatchInvite={(targetUid, targetName, isRematch) => {
+              if (!userProfile) {
+                handleOpenAuth();
+                return;
+              }
+              soundEngine.unlock();
+              const c = engineRef.current.career;
+              pvpClient.setProfile(
+                userProfile.username,
+                engineRef.current.moneyRack,
+                {
+                  wins: c.pvpWins,
+                  losses: c.pvpLosses,
+                  draws: c.pvpDraws,
+                },
+                userProfile.uid,
+                buildServerProfileStats(c)
+              );
+              pvpClient.sendMatchInvite({
+                targetUid,
+                targetName,
+                isRematch,
+                leagueId: activeLeague?.id ?? null,
+                leagueName: activeLeague?.name ?? null,
+              });
+            }}
+            onCancelMatchInvite={(inviteId) => pvpClient.cancelMatchInvite(inviteId)}
+            onOpenHighlightReplay={() => {
+              if (hud.contestHighlight) {
+                soundEngine.unlock();
+                setActiveHighlight(hud.contestHighlight);
+              }
+            }}
+            onBackToTitle={handleQuitToTitle}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activeHighlight && (
+          <HighlightReplayModal
+            key={`highlight-${activeHighlight.id}-${activeHighlight.recordedAt}`}
+            highlight={activeHighlight}
+            onClose={() => setActiveHighlight(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showEditUsername && (
+          <EditUsernameModal
+            key="edit-username"
+            userProfile={userProfile}
+            guestName={playerName}
+            onSaveAccountProfile={handleUpdatedAccountProfile}
+            onSaveGuestName={handleChangePlayerName}
+            onOpenAuth={handleOpenAuth}
+            onClose={() => setShowEditUsername(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Global Incoming & Outgoing Direct Match Request Overlays */}
+      <AnimatePresence>
+        {incomingInvite &&
+          (hud.phase === 'TITLE' || hud.phase === 'GAME_OVER' || hud.phase === 'PAUSED') && (
+            <motion.div
+              key={`incoming-invite-${incomingInvite.inviteId}`}
+              initial={{ opacity: 0, y: -24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+              role="dialog"
+              aria-label="Incoming Match Request"
+              className="fixed top-[max(0.75rem,env(safe-area-inset-top))] inset-x-3 sm:inset-x-auto sm:right-5 sm:w-[380px] z-40 bg-[#090B10] border border-[#00ffaa] rounded-[4px] p-4 shadow-[0_16px_44px_rgba(0,0,0,0.85)]"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
+                    <Swords className="w-3.5 h-3.5" />
+                    <span>
+                      {incomingInvite.isRematch ? 'Rematch Request' : '1v1 Match Request'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                    <span className="font-display text-xl font-extrabold uppercase tracking-tight text-[#FFFFFF] truncate">
+                      @{incomingInvite.fromName}
+                    </span>
+                    <RivalBadgeIcon
+                      rivalry={findRivalryForUsername(
+                        hud.rivalries,
+                        incomingInvite.fromName,
+                        userProfile?.username ?? playerName
+                      )}
+                    />
+                  </div>
+                  {incomingInvite.leagueName && (
+                    <div className="font-mono text-[10px] text-[#FEF08A] truncate">
+                      League: {incomingInvite.leagueName}
+                    </div>
+                  )}
+                </div>
+                <span className="font-mono text-xs font-bold text-[#00ffaa] tabular-nums shrink-0">
+                  {Math.max(0, Math.ceil(inviteCountdownMs / 1000))}s
+                </span>
+              </div>
+
+              <div className="w-full h-1 bg-white/15 rounded-[2px] overflow-hidden mb-3">
+                <div
+                  className="h-full bg-[#00ffaa] transition-[width] duration-200"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, (inviteCountdownMs / 45000) * 100))}%`,
+                  }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.unlock();
+                    if (userProfile) {
+                      const c = engineRef.current.career;
+                      pvpClient.setProfile(
+                        userProfile.username,
+                        engineRef.current.moneyRack,
+                        {
+                          wins: c.pvpWins,
+                          losses: c.pvpLosses,
+                          draws: c.pvpDraws,
+                        },
+                        userProfile.uid,
+                        buildServerProfileStats(c)
+                      );
+                    }
+                    pvpClient.respondMatchInvite(incomingInvite.inviteId, true);
+                  }}
+                  className="min-h-[44px] px-3 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] text-[#05070B] font-sans text-sm font-extrabold uppercase tracking-wider cursor-pointer"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    pvpClient.respondMatchInvite(incomingInvite.inviteId, false);
+                    setIncomingInvite(null);
+                  }}
+                  className="min-h-[44px] px-3 py-2 rounded-[2px] bg-white/12 hover:bg-[#EF4444]/30 border border-white/25 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  Decline
+                </button>
+              </div>
+            </motion.div>
+          )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {outgoingInvite &&
+          !incomingInvite &&
+          (hud.phase === 'TITLE' || hud.phase === 'GAME_OVER') && (
+            <motion.div
+              key={`outgoing-invite-${outgoingInvite.inviteId}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.18 }}
+              className="fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] inset-x-3 sm:inset-x-auto sm:right-5 sm:w-[360px] z-40 bg-[#090B10] border border-[#FDE047]/80 rounded-[4px] p-3.5 shadow-2xl flex items-center justify-between gap-3"
+            >
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#FEF08A]">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>
+                    {outgoingInvite.isRematch ? 'Rematch Request Sent' : 'Match Request Sent'} ·{' '}
+                    {Math.max(0, Math.ceil(inviteCountdownMs / 1000))}s
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                  <span className="font-mono text-xs font-bold text-[#FFFFFF] truncate">
+                    Waiting for @{outgoingInvite.toName}...
+                  </span>
+                  <RivalBadgeIcon
+                    rivalry={findRivalryForUsername(
+                      hud.rivalries,
+                      outgoingInvite.toName,
+                      userProfile?.username ?? playerName
+                    )}
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  pvpClient.cancelMatchInvite(outgoingInvite.inviteId);
+                  setOutgoingInvite(null);
+                }}
+                className="min-h-[40px] px-3 py-1.5 rounded-[2px] bg-white/12 hover:bg-white/22 border border-white/25 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer shrink-0"
+              >
+                Cancel
+              </button>
+            </motion.div>
+          )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {inviteNotice && (
+          <motion.div
+            key={`invite-notice-${inviteNotice.id}`}
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            className={`fixed top-[max(0.75rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-[4px] border shadow-xl flex items-center gap-2.5 max-w-[92vw] ${
+              inviteNotice.tone === 'err'
+                ? 'bg-[#090B10] border-[#FECACA]/80 text-[#FECACA]'
+                : 'bg-[#090B10] border-[#00ffaa]/80 text-[#00ffaa]'
+            }`}
+          >
+            <span className="font-mono text-xs font-semibold">{inviteNotice.text}</span>
+            <button
+              type="button"
+              onClick={() => setInviteNotice(null)}
+              aria-label="Dismiss notification"
+              className="p-1 text-[#E2E8F0] hover:text-[#FFFFFF] cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

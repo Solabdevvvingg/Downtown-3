@@ -1,6 +1,14 @@
 export type GamePhase = 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'PAUSED' | 'GAME_OVER';
 
-export type GameMode = 'SOLO' | 'HEAT_CHECK' | 'PVP';
+export type GameMode = 'SOLO' | 'FAST_BREAK' | 'HEAT_CHECK' | 'PRACTICE' | 'PVP';
+
+export type CameraMode = 'FOLLOW' | 'PRO_STATIC';
+
+export type CourtThemeId =
+  | 'wooden_gym'
+  | 'street_asphalt'
+  | 'neon_arena'
+  | 'championship_gold';
 
 export type ShotOutcome = 'SWISH' | 'MAKE' | 'BANK' | 'RIM_OUT' | 'AIRBALL';
 
@@ -13,9 +21,51 @@ export interface CareerStats {
   totalCareerScore: number;
   allTimeBestStreak: number;
   contestsPlayed: number;
+  totalSwishes: number;
+  totalSwishTrackedAttempts: number;
+  totalBestStreakSum: number;
+  streakTrackedContests: number;
   pvpWins: number;
   pvpLosses: number;
   pvpDraws: number;
+  bestFastBreakMs: number;
+  bestFastBreakSplitsMs: number[];
+  fastBreakContests: number;
+}
+
+export interface FastBreakSplit {
+  rackIndex: number;
+  shortLabel: string;
+  lapMs: number | null;
+  cumulativeMs: number | null;
+  deltaMs: number | null;
+}
+
+export interface CareerBaseline {
+  contestsPlayed: number;
+  totalCareerScore: number;
+  totalSwishes: number;
+  totalSwishTrackedAttempts: number;
+  totalBestStreakSum: number;
+  streakTrackedContests: number;
+  allTimeBestStreak: number;
+  bestScore: number;
+  bestFastBreakMs: number;
+}
+
+export interface RivalryRecord {
+  opponentKey: string;
+  opponentName: string;
+  wins: number;
+  losses: number;
+  draws: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  lastScoreFor: number;
+  lastScoreAgainst: number;
+  lastResult: 'WIN' | 'LOSS' | 'DRAW';
+  currentStreak: number;
+  lastPlayedAt: number;
 }
 
 export type TimingQuality = 'PERFECT' | 'GOOD' | 'EARLY' | 'LATE';
@@ -25,6 +75,16 @@ export interface TimingBreakdown {
   good: number;
   early: number;
   late: number;
+}
+
+export interface StaminaEfficiencyStats {
+  efficiencyPct: number;
+  totalSaved: number;
+  timingSaved: number;
+  movementRecovered: number;
+  endStamina: number;
+  minStamina: number;
+  rating: 'Elite' | 'Sharp' | 'Steady' | 'Winded';
 }
 
 export interface PvpRecord {
@@ -51,9 +111,16 @@ export interface UserProfile {
   totalCareerScore: number;
   allTimeBestStreak: number;
   contestsPlayed: number;
+  totalSwishes: number;
+  totalSwishTrackedAttempts: number;
+  totalBestStreakSum: number;
+  streakTrackedContests: number;
   pvpWins: number;
   pvpLosses: number;
   pvpDraws: number;
+  bestFastBreakMs: number;
+  bestFastBreakSplitsMs: number[];
+  fastBreakContests: number;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -69,10 +136,60 @@ export interface BallSlotRecord {
   multiplierUsed: number;
 }
 
+export interface ShotChartEntry {
+  id: number;
+  rackIndex: number;
+  ballIndex: number;
+  x: number;
+  y: number;
+  isMoney: boolean;
+  timingQuality: TimingQuality;
+  status: 'IN_AIR' | 'MADE' | 'MISSED';
+  isSwish?: boolean;
+  pointsAwarded: number;
+}
+
+export interface HighlightFrame {
+  t: number;
+  x: number;
+  y: number;
+  z: number;
+  spinAngle: number;
+}
+
+export interface ContestHighlight {
+  id: number;
+  mode: GameMode;
+  courtTheme: CourtThemeId;
+  rackIndex: number;
+  rackLabel: string;
+  ballIndex: number;
+  isMoney: boolean;
+  isSwish: boolean;
+  isBuzzerBeater: boolean;
+  hadRimHang: boolean;
+  timingQuality: TimingQuality;
+  pointsAwarded: number;
+  multiplier: number;
+  streakAtMake: number;
+  windMph: number;
+  shooterName: string;
+  shooterPos: Vec3;
+  shooterFacing: { x: number; y: number };
+  hoopPos: Vec3;
+  frames: HighlightFrame[];
+  rimHitsAt: number[];
+  scoreAtTime: number;
+  duration: number;
+  priorityScore: number;
+  recordedAt: number;
+}
+
 export interface RackConfig {
   id: number;
   label: string;
   shortLabel: string;
+  ballsCount: number;
   /** World coordinates (feet) relative to hoop center (0, 0, 0) */
   x: number;
   y: number;
@@ -98,6 +215,16 @@ export interface ProjectedPoint {
   visible: boolean;
 }
 
+export interface RimHangState {
+  angle: number;
+  angularVel: number;
+  duration: number;
+  elapsed: number;
+  willScore: boolean;
+  bounces: number;
+  lastBounceStep: number;
+}
+
 export interface ActiveBall {
   id: number;
   rackIndex: number;
@@ -105,6 +232,8 @@ export interface ActiveBall {
   isMoney: boolean;
   multiplierAtRelease: number;
   streakAtRelease?: number;
+  difficultyLevelAtRelease?: number;
+  timingQualityAtRelease?: TimingQuality;
   isBuzzerBeater: boolean;
   isRemote?: boolean;
   skipRimCollision?: boolean;
@@ -117,6 +246,25 @@ export interface ActiveBall {
   hasResolved: boolean;
   hitRimCount: number;
   hitBackboard: boolean;
+  hadRimHang?: boolean;
+  rimHangDone?: boolean;
+  rimHang?: RimHangState;
+  shooterPosAtRelease?: Vec3;
+  shooterFacingAtRelease?: { x: number; y: number };
+  hoopPosAtRelease?: Vec3;
+  windMphAtRelease?: number;
+  highlightFrames?: HighlightFrame[];
+  rimHitTimes?: number[];
+  highlightScoreAtTime?: number;
+  highlightMeta?: {
+    pointsAwarded: number;
+    multiplier: number;
+    streakAtMake: number;
+    isCleanSwish: boolean;
+    priorityScore: number;
+  };
+  highlightSaved?: boolean;
+  instantReplayTriggered?: boolean;
   trail: Vec3[];
   age: number;
 }
@@ -163,6 +311,7 @@ export interface FloatingCallout {
   worldPos: Vec3;
   life: number;
   maxLife: number;
+  behindBackboard?: boolean;
 }
 
 export interface Flashbulb {
@@ -183,6 +332,75 @@ export interface DifficultyTier {
   gatherCooldown: number;
 }
 
+export type ShooterAnimState =
+  | 'DRIBBLING'
+  | 'GATHER'
+  | 'RELEASE'
+  | 'FOLLOW_THROUGH'
+  | 'LANDING'
+  | 'PICKUP'
+  | 'RUNNING';
+
+export type FriendshipStatus = 'PENDING' | 'ACCEPTED';
+
+export type FriendPresence = 'ONLINE' | 'IN_MATCH' | 'QUEUED' | 'OFFLINE';
+
+export interface FriendshipRecord {
+  pairId: string;
+  memberUids: [string, string];
+  requesterUid: string;
+  requesterName: string;
+  recipientUid: string;
+  recipientName: string;
+  friendUid: string;
+  friendUsername: string;
+  status: FriendshipStatus;
+  isIncoming: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface CourtRankingEntry {
+  uid: string;
+  courtId: CourtThemeId;
+  username: string;
+  bestScore: number;
+  bestStreak: number;
+  totalSwishes: number;
+  contestsPlayed: number;
+  lastScore: number;
+  updatedAtMs: number;
+}
+
+export interface GlobalRankingEntry {
+  uid: string;
+  username: string;
+  bestScore: number;
+  bestCourtId: CourtThemeId;
+  bestStreak: number;
+  totalSwishes: number;
+  pvpMatchesPlayed: number;
+  pvpWins: number;
+  pvpLosses: number;
+  pvpDraws: number;
+  lastScore: number;
+  lastCourtId: CourtThemeId;
+  updatedAtMs: number;
+}
+
+export interface MatchInvitePayload {
+  inviteId: string;
+  fromUid: string;
+  fromSessionId: string;
+  fromName: string;
+  toUid: string;
+  toName: string;
+  isRematch: boolean;
+  leagueId: string | null;
+  leagueName: string | null;
+  expiresAtMs: number;
+}
+
 export interface PvpBallRecord {
   status: 'PENDING' | 'MADE' | 'MISSED';
   isMoney: boolean;
@@ -191,6 +409,7 @@ export interface PvpBallRecord {
 
 export interface PvpPlayerSnapshot {
   id: string;
+  uid?: string | null;
   name: string;
   isHost: boolean;
   moneyRack: number;
@@ -207,11 +426,16 @@ export interface PvpPlayerSnapshot {
   rematchReady: boolean;
   finishedShooting: boolean;
   record?: PvpRecord;
+  profileBestScore?: number;
+  profileBestStreak?: number;
+  profileAccuracyPct?: number;
 }
 
 export interface PvpMatchSnapshot {
   roomId: string;
   code: string | null;
+  leagueId?: string | null;
+  leagueName?: string | null;
   status: 'WAITING' | 'COUNTDOWN' | 'PLAYING' | 'FINISHED';
   countdownLeft: number;
   timeLeft: number;
@@ -221,20 +445,71 @@ export interface PvpMatchSnapshot {
   players: PvpPlayerSnapshot[];
 }
 
+export interface PvpLobbyShooter {
+  id: string;
+  name: string;
+  status: 'LOBBY' | 'QUEUED' | 'IN_MATCH';
+  record: PvpRecord;
+}
+
 export interface PvpLobbyStats {
   onlinePlayers: number;
   queuedPlayers: number;
   activeMatches: number;
+  leagueQueued?: Record<string, number>;
+  onlineShooters?: PvpLobbyShooter[];
+}
+
+export interface PvpLeague {
+  id: string;
+  name: string;
+  description: string;
+  code: string;
+  isPublic: boolean;
+  ownerUid: string;
+  ownerName: string;
+  memberUids: string[];
+  memberCount: number;
+  maxMembers: number;
+  createdAtMs: number;
+}
+
+export interface PvpLeagueMember {
+  uid: string;
+  username: string;
+  role: 'OWNER' | 'MEMBER';
+  wins: number;
+  losses: number;
+  draws: number;
+  matchesPlayed: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  leaguePoints: number;
+  bestScore: number;
+  joinedAtMs: number;
+}
+
+export interface UserLeagueSummary {
+  leagueId: string;
+  leagueName: string;
+  code: string;
+  role: 'OWNER' | 'MEMBER';
+  joinedAtMs: number;
 }
 
 export interface OpponentGhostState {
   active: boolean;
   name: string;
   pos: Vec3;
+  targetPos?: Vec3;
+  facing?: { x: number; y: number };
   z: number;
   rackIndex: number;
   streak: number;
   followThrough: number;
+  runPhase?: number;
+  runBlend?: number;
+  isMoving?: boolean;
 }
 
 export interface HudSnapshot {
@@ -243,6 +518,7 @@ export interface HudSnapshot {
   score: number;
   bestScore: number;
   career: CareerStats;
+  careerBaseline: CareerBaseline;
   timeLeft: number;
   countdownValue: number;
   currentRack: number;
@@ -262,6 +538,8 @@ export interface HudSnapshot {
   isNewBest: boolean;
   muted: boolean;
   lastFeedback: string | null;
+  lastReleaseMeter: number;
+  lastTimingQuality: TimingQuality | null;
   activeBallsInAir: number;
   pvpMatch: PvpMatchSnapshot | null;
   myPlayerId: string | null;
@@ -270,5 +548,24 @@ export interface HudSnapshot {
   hoopPos: Vec3;
   heatCheckShiftIn: number;
   isMovingToRack: boolean;
+  shooterAnimState: ShooterAnimState;
   stamina: number;
+  consecutivePerfectShots: number;
+  secondWindCount: number;
+  secondWindActive: boolean;
+  shotChart: ShotChartEntry[];
+  staminaEfficiency: StaminaEfficiencyStats;
+  courtTheme: CourtThemeId;
+  contestHighlight: ContestHighlight | null;
+  lastHighlight: ContestHighlight | null;
+  rivalries: RivalryRecord[];
+  fastBreakElapsedMs: number;
+  fastBreakFinishMs: number | null;
+  fastBreakSplits: FastBreakSplit[];
+  fastBreakIsNewBest: boolean;
+  instantReplayEnabled: boolean;
+  instantReplayActive: boolean;
+  instantReplayHeadline: string | null;
+  instantReplayPoints: number;
+  cameraMode: CameraMode;
 }

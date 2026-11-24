@@ -1,27 +1,58 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowRight,
+  Film,
   Flame,
+  GraduationCap,
   Infinity as InfinityIcon,
   Pause,
+  Timer,
+  Trophy,
   Volume2,
   VolumeX,
   Wind,
   Zap,
 } from 'lucide-react';
-import { BALLS_PER_RACK, RACK_CONFIGS, STAMINA_LOW_THRESHOLD } from '../game/constants';
+import {
+  getRackBallCount,
+  getSlotIndex,
+  RACK_CONFIGS,
+  RACKS_COUNT,
+  STAMINA_LOW_THRESHOLD,
+} from '../game/constants';
+import { formatFastBreakMs, formatSplitDeltaMs } from '../game/timeFormat';
 import { HudSnapshot } from '../game/types';
+
+function formatContestClock(seconds: number): string {
+  const clamped = Math.max(0, seconds);
+  if (clamped >= 60) {
+    const mins = Math.floor(clamped / 60);
+    const rem = clamped - mins * 60;
+    return `${mins}:${rem.toFixed(1).padStart(4, '0')}`;
+  }
+  return clamped.toFixed(1);
+}
 
 interface GameHudProps {
   hud: HudSnapshot;
   onToggleMute: () => void;
   onPause: () => void;
+  onToggleInstantReplay: () => void;
+  onSkipInstantReplay?: () => void;
 }
 
-export const GameHud: React.FC<GameHudProps> = ({ hud, onToggleMute, onPause }) => {
+export const GameHud: React.FC<GameHudProps> = ({
+  hud,
+  onToggleMute,
+  onPause,
+  onToggleInstantReplay,
+}) => {
   const isHeatCheck = hud.mode === 'HEAT_CHECK';
-  const isUrgent = !isHeatCheck && hud.timeLeft <= 10.0 && hud.phase === 'PLAYING';
+  const isPractice = hud.mode === 'PRACTICE';
+  const isFastBreak = hud.mode === 'FAST_BREAK';
+  const isNoClock = isHeatCheck || isPractice || isFastBreak;
+  const isUrgent = !isNoClock && hud.timeLeft <= 10.0 && hud.phase === 'PLAYING';
   const activeRack = RACK_CONFIGS[Math.min(hud.currentRack, RACK_CONFIGS.length - 1)];
   const staminaPct = Math.max(0, Math.min(100, Math.round(hud.stamina)));
   const isLowStamina = staminaPct < STAMINA_LOW_THRESHOLD;
@@ -31,27 +62,92 @@ export const GameHud: React.FC<GameHudProps> = ({ hud, onToggleMute, onPause }) 
       ? hud.pvpMatch.players.find((p) => p.id !== hud.myPlayerId) ?? null
       : null;
 
+  const prevOppScoreRef = useRef<number>(opponent?.score ?? 0);
+  const [oppDeltaBurst, setOppDeltaBurst] = useState<{ key: number; pts: number } | null>(null);
+
+  useEffect(() => {
+    if (hud.mode !== 'PVP' || !opponent) {
+      prevOppScoreRef.current = 0;
+      setOppDeltaBurst(null);
+      return;
+    }
+    const prev = prevOppScoreRef.current;
+    if (opponent.score > prev) {
+      const gained = opponent.score - prev;
+      setOppDeltaBurst({ key: Date.now(), pts: gained });
+      prevOppScoreRef.current = opponent.score;
+      const timer = window.setTimeout(() => {
+        setOppDeltaBurst((cur) => (cur && cur.pts === gained ? null : cur));
+      }, 1350);
+      return () => window.clearTimeout(timer);
+    }
+    prevOppScoreRef.current = opponent.score;
+  }, [hud.mode, opponent?.score, opponent]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.22 }}
-      className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-2.5 sm:p-4 md:p-5"
+      className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between pt-[max(0.625rem,env(safe-area-inset-top))] pb-[max(0.625rem,env(safe-area-inset-bottom))] pl-[max(0.625rem,env(safe-area-inset-left))] pr-[max(0.625rem,env(safe-area-inset-right))] sm:p-4 md:p-5"
     >
-      {/* Top Broadcast Scoreboard Bar — compact and non-overflowing on mobile */}
-      <div className="flex flex-wrap md:flex-nowrap items-start justify-between gap-2">
-        {/* Left Column: Score / Multiplier / Streak + Stamina Bar */}
+      {/* Top Broadcast Scoreboard Bar */}
+      <div className="flex flex-wrap lg:flex-nowrap items-start justify-between gap-1.5 sm:gap-2">
+        {/* Left Column: Top-Left Opponent Points Tally (PVP) + Score / Multiplier / Streak + Stamina Bar */}
         <motion.div
           initial={{ opacity: 0, y: -16, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -12, scale: 0.96 }}
           transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-          className="flex flex-col gap-1.5"
+          className="flex flex-col gap-1 sm:gap-1.5"
         >
-          <div className="flex items-stretch bg-[#12161F]/92 border border-white/12 rounded-lg overflow-hidden">
-            <div className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 flex flex-col justify-center">
-              <span className="text-[10px] sm:text-[11px] font-medium text-[#94A3B8]">
+          {hud.mode === 'PVP' && hud.phase === 'PLAYING' && opponent && (
+            <div
+              className="flex items-center justify-between gap-2.5 bg-[#07090E]/96 border border-[#FDE047]/75 rounded-[4px] px-2.5 sm:px-3.5 py-1.5 shadow-lg backdrop-blur-sm"
+              aria-label={`Opponent ${opponent.name} points tally ${opponent.score}`}
+            >
+              <div className="min-w-0 flex items-center gap-1.5">
+                <span className="font-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.1em] text-[#FEF08A] shrink-0">
+                  Opp
+                </span>
+                <span className="font-mono text-[10px] sm:text-xs font-bold text-[#FFFFFF] truncate max-w-[82px] sm:max-w-[130px]">
+                  {opponent.name}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5 shrink-0">
+                <AnimatePresence>
+                  {oppDeltaBurst && (
+                    <motion.span
+                      key={oppDeltaBurst.key}
+                      initial={{ opacity: 0, y: 4, scale: 0.85 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.2 }}
+                      className="font-mono text-[10px] sm:text-xs font-bold text-[#00ffaa] tabular-nums"
+                    >
+                      +{oppDeltaBurst.pts}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <motion.span
+                  key={opponent.score}
+                  initial={{ scale: opponent.score > 0 ? 1.2 : 1 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 460, damping: 22 }}
+                  className="font-mono text-base sm:text-xl font-bold leading-none text-[#FEF08A] tabular-nums"
+                >
+                  {opponent.score}
+                </motion.span>
+                <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-[#E2E8F0] font-semibold">
+                  pts
+                </span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-stretch bg-[#07090E]/96 border border-white/25 rounded-[4px] overflow-hidden shadow-lg backdrop-blur-sm">
+            <div className="px-2 sm:px-3.5 py-1.5 sm:py-2 flex flex-col justify-center">
+              <span className="font-mono text-[9px] sm:text-[10px] uppercase tracking-[0.12em] text-[#E2E8F0] font-semibold">
                 {hud.mode === 'PVP' ? 'You' : 'Score'}
               </span>
               <motion.span
@@ -59,169 +155,276 @@ export const GameHud: React.FC<GameHudProps> = ({ hud, onToggleMute, onPause }) 
                 initial={{ scale: hud.score > 0 ? 1.18 : 1, y: hud.score > 0 ? -2 : 0 }}
                 animate={{ scale: 1, y: 0 }}
                 transition={{ type: 'spring', stiffness: 460, damping: 24 }}
-                className="font-mono text-xl sm:text-2xl md:text-3xl font-bold leading-none text-[#F4EFE6] tabular-nums inline-block"
+                className="font-mono text-lg sm:text-2xl md:text-3xl font-bold leading-none text-[#FFFFFF] tabular-nums inline-block mt-0.5"
               >
                 {hud.score}
               </motion.span>
             </div>
 
-            <div className="w-px bg-white/10" />
+            <div className="w-px bg-white/20" />
 
-            <div className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 flex flex-col justify-center">
-              <span className="text-[10px] sm:text-[11px] font-medium text-[#94A3B8]">Mult</span>
+            <div className="px-2 sm:px-3.5 py-1.5 sm:py-2 flex flex-col justify-center">
+              <span className="font-mono text-[9px] sm:text-[10px] uppercase tracking-[0.12em] text-[#E2E8F0] font-semibold">
+                Mult
+              </span>
               <motion.span
                 key={hud.multiplier}
                 initial={{ scale: hud.multiplier > 1 ? 1.24 : 1 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 480, damping: 22 }}
-                className={`font-mono text-xl sm:text-2xl md:text-3xl font-bold leading-none tabular-nums inline-block ${
+                className={`font-mono text-lg sm:text-2xl md:text-3xl font-bold leading-none tabular-nums inline-block mt-0.5 ${
                   hud.multiplier >= 4
-                    ? 'text-[#F59E0B]'
+                    ? 'text-[#00ffaa]'
                     : hud.multiplier >= 2
-                      ? 'text-[#F9631C]'
-                      : 'text-[#CBD5E1]'
+                      ? 'text-[#FEF08A]'
+                      : 'text-[#FFFFFF]'
                 }`}
               >
                 {hud.multiplier}x
               </motion.span>
             </div>
 
-            <div className="w-px bg-white/10" />
+            <div className="w-px bg-white/20" />
 
-            <div className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 flex flex-col justify-center">
-              <span className="text-[10px] sm:text-[11px] font-medium text-[#94A3B8] whitespace-nowrap">
+            <div className="px-2 sm:px-3.5 py-1.5 sm:py-2 flex flex-col justify-center">
+              <span className="font-mono text-[9px] sm:text-[10px] uppercase tracking-[0.1em] text-[#E2E8F0] font-semibold whitespace-nowrap">
                 {hud.difficulty.label}
               </span>
-              <div className="flex items-baseline gap-1.5">
+              <div className="flex items-baseline gap-1 mt-0.5">
                 <motion.span
                   key={hud.streak}
                   initial={{ scale: hud.streak > 0 ? 1.22 : 1 }}
                   animate={{ scale: 1 }}
                   transition={{ type: 'spring', stiffness: 460, damping: 22 }}
-                  className="font-mono text-lg sm:text-xl md:text-2xl font-bold leading-none text-[#F4EFE6] tabular-nums inline-block"
+                  className="font-mono text-base sm:text-xl md:text-2xl font-bold leading-none text-[#FFFFFF] tabular-nums inline-block"
                 >
                   {hud.streak}
                 </motion.span>
-                <span className="text-[10px] sm:text-[11px] font-semibold text-[#F59E0B] tabular-nums">
+                <span className="font-mono text-[9px] sm:text-[11px] font-bold text-[#00ffaa] tabular-nums">
                   Lv.{hud.difficulty.level}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Stamina Bar */}
+          {/* Stamina Bar + Second Wind Indicator */}
           <div
-            className={`bg-[#12161F]/92 border rounded-lg px-2.5 sm:px-3 py-1.5 transition-colors ${
-              isLowStamina ? 'border-[#EF4444]/55' : 'border-white/12'
+            className={`bg-[#07090E]/96 border rounded-[4px] px-2 sm:px-3 py-1 sm:py-1.5 transition-colors shadow-lg backdrop-blur-sm ${
+              hud.secondWindActive
+                ? 'border-[#00ffaa] shadow-[0_0_12px_rgba(0,255,170,0.28)]'
+                : isLowStamina
+                  ? 'border-[#FECACA]'
+                  : 'border-white/25'
             }`}
             aria-label={`Stamina ${staminaPct} percent${isLowStamina ? ', low stamina faster meter' : ''}`}
           >
-            <div className="flex items-center justify-between gap-2 text-[10px] leading-none mb-1">
-              <span className="flex items-center gap-1 font-medium text-[#94A3B8]">
+            <div className="flex items-center justify-between gap-2 text-[9px] sm:text-[10px] leading-none mb-1">
+              <span className="flex items-center gap-1 font-mono uppercase tracking-[0.1em] text-[#E2E8F0] font-semibold">
                 <Zap
                   className={`w-3 h-3 ${
-                    isLowStamina
-                      ? 'text-[#EF4444]'
-                      : staminaPct < 70
-                        ? 'text-[#F59E0B]'
-                        : 'text-[#10B981]'
+                    hud.secondWindActive
+                      ? 'text-[#00ffaa]'
+                      : isLowStamina
+                        ? 'text-[#FECACA]'
+                        : staminaPct < 70
+                          ? 'text-[#FEF08A]'
+                          : 'text-[#00ffaa]'
                   }`}
                 />
                 <span>Stamina</span>
+                {hud.consecutivePerfectShots > 0 && !hud.secondWindActive && (
+                  <span
+                    className="inline-flex items-center gap-0.5 ml-1"
+                    title={`Second Wind: ${hud.consecutivePerfectShots}/3 consecutive perfect shots`}
+                  >
+                    {[0, 1, 2].map((idx) => (
+                      <span
+                        key={idx}
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          idx < hud.consecutivePerfectShots
+                            ? 'bg-[#00ffaa]'
+                            : 'bg-white/30'
+                        }`}
+                      />
+                    ))}
+                  </span>
+                )}
               </span>
               <div className="flex items-center gap-1.5">
-                {isLowStamina && (
-                  <span className="text-[9px] font-semibold text-[#FCA5A5] tracking-tight uppercase">
-                    Low · Faster Meter
+                {hud.secondWindActive ? (
+                  <span className="font-mono text-[9px] font-bold text-[#00ffaa] tracking-tight uppercase">
+                    Second Wind +10%
                   </span>
+                ) : (
+                  isLowStamina && (
+                    <span className="font-mono text-[9px] font-bold text-[#FECACA] tracking-tight uppercase">
+                      Low · Faster
+                    </span>
+                  )
                 )}
                 <span
                   className={`font-mono font-bold tabular-nums ${
-                    isLowStamina
-                      ? 'text-[#EF4444]'
-                      : staminaPct < 70
-                        ? 'text-[#F59E0B]'
-                        : 'text-[#10B981]'
+                    hud.secondWindActive
+                      ? 'text-[#00ffaa]'
+                      : isLowStamina
+                        ? 'text-[#FECACA]'
+                        : staminaPct < 70
+                          ? 'text-[#FEF08A]'
+                          : 'text-[#00ffaa]'
                   }`}
                 >
                   {staminaPct}%
                 </span>
               </div>
             </div>
-            <div className="relative w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div className="relative w-full h-1.5 bg-white/15 rounded-[1px] overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-100 ${
-                  isLowStamina
-                    ? 'bg-[#EF4444]'
-                    : staminaPct < 70
-                      ? 'bg-[#F59E0B]'
-                      : 'bg-[#10B981]'
+                className={`h-full transition-all duration-100 ${
+                  hud.secondWindActive
+                    ? 'bg-[#00ffaa]'
+                    : isLowStamina
+                      ? 'bg-[#F87171]'
+                      : staminaPct < 70
+                        ? 'bg-[#FDE047]'
+                        : 'bg-[#00ffaa]'
                 }`}
                 style={{ width: `${staminaPct}%` }}
               />
-              {/* Fatigue threshold tick */}
               <span
                 aria-hidden="true"
-                className="absolute top-0 bottom-0 w-px bg-white/35"
+                className="absolute top-0 bottom-0 w-px bg-white/65"
                 style={{ left: `${STAMINA_LOW_THRESHOLD}%` }}
               />
             </div>
           </div>
         </motion.div>
 
-        {/* Center: Arena Shot Clock (or Heat Check No-Clock Moving Hoop Mode), Rack Label & Wind Indicator */}
+        {/* Center: Arena Shot Clock / Mode Strip & Wind Indicator */}
         <motion.div
           initial={{ opacity: 0, y: -16, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -12, scale: 0.96 }}
           transition={{ type: 'spring', stiffness: 360, damping: 28, delay: 0.05 }}
-          className="flex items-stretch gap-1.5 sm:gap-2"
+          className="flex items-stretch gap-1.5 sm:gap-2 order-3 lg:order-none w-full lg:w-auto justify-between lg:justify-center"
         >
           {isHeatCheck ? (
-            <div className="flex flex-col items-center justify-center bg-[#12161F]/92 border border-[#F59E0B]/40 rounded-lg px-3 sm:px-4 py-1 sm:py-1.5">
-              <div className="flex items-center gap-1.5 font-display text-xl sm:text-2xl md:text-[26px] font-extrabold tracking-wide leading-none text-[#F59E0B]">
-                <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-[#F9631C]" />
-                <span>HEAT CHECK</span>
-                <InfinityIcon className="w-4 h-4 text-[#FDE047]" />
+            <div className="flex flex-col items-center justify-center bg-[#07090E]/96 border border-[#FDE047]/75 rounded-[4px] px-3 sm:px-4 py-1 sm:py-1.5 shadow-lg backdrop-blur-sm flex-1 lg:flex-initial">
+              <div className="flex items-center gap-1.5 font-sans text-sm sm:text-lg md:text-xl font-extrabold uppercase tracking-wide leading-none text-[#FEF08A] whitespace-nowrap">
+                <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-[#FEF08A] shrink-0" />
+                <span>Heat Check</span>
+                <InfinityIcon className="w-4 h-4 text-[#00ffaa] shrink-0" />
               </div>
-              <div className="text-[10px] sm:text-[11px] font-medium text-[#CBD5E1] mt-1 whitespace-nowrap tabular-nums">
-                R{Math.min(hud.currentRack + 1, 5)}/5 · {activeRack.shortLabel} · Shift{' '}
-                <span className="font-mono text-[#F59E0B]">{hud.heatCheckShiftIn.toFixed(1)}s</span>
+              <div className="font-mono text-[10px] font-semibold text-[#FFFFFF] mt-1 whitespace-nowrap tabular-nums">
+                R{Math.min(hud.currentRack + 1, RACKS_COUNT)}/{RACKS_COUNT} · {activeRack.shortLabel} · Shift{' '}
+                <span className="text-[#00ffaa]">{hud.heatCheckShiftIn.toFixed(1)}s</span>
+              </div>
+            </div>
+          ) : isPractice ? (
+            <div className="flex flex-col items-center justify-center bg-[#07090E]/96 border border-[#00ffaa]/75 rounded-[4px] px-3 sm:px-4 py-1 sm:py-1.5 shadow-lg backdrop-blur-sm flex-1 lg:flex-initial">
+              <div className="flex items-center gap-1.5 font-sans text-sm sm:text-lg md:text-xl font-extrabold uppercase tracking-wide leading-none text-[#00ffaa] whitespace-nowrap">
+                <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-[#00ffaa] shrink-0" />
+                <span>Practice</span>
+                <InfinityIcon className="w-4 h-4 text-[#FFFFFF] shrink-0" />
+              </div>
+              <div className="font-mono text-[10px] font-semibold text-[#FFFFFF] mt-1 whitespace-nowrap tabular-nums">
+                No Clock · R{Math.min(hud.currentRack + 1, RACKS_COUNT)}/{RACKS_COUNT} · {activeRack.shortLabel}
+                {hud.currentRack === hud.moneyRack
+                  ? ' · 2x Rack'
+                  : getRackBallCount(hud.currentRack) === 1
+                    ? ' · 2x Bonus'
+                    : ''}
+              </div>
+            </div>
+          ) : isFastBreak ? (
+            <div className="flex flex-col items-center justify-center bg-[#07090E]/96 border border-[#00ffaa]/75 rounded-[4px] px-3 sm:px-5 py-1 sm:py-1.5 shadow-lg backdrop-blur-sm flex-1 lg:flex-initial">
+              <div className="flex items-center gap-1.5 font-mono text-xl sm:text-3xl md:text-4xl font-bold leading-none tracking-tight tabular-nums text-[#00ffaa]">
+                <Timer className="w-4 h-4 sm:w-5 sm:h-5 text-[#00ffaa] shrink-0" />
+                <span>
+                  {formatFastBreakMs(hud.fastBreakFinishMs ?? hud.fastBreakElapsedMs)}
+                </span>
+              </div>
+              <div className="font-mono text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-[#FFFFFF] mt-0.5 whitespace-nowrap tabular-nums">
+                {hud.fastBreakFinishMs !== null
+                  ? hud.fastBreakIsNewBest
+                    ? 'All 6 Spots · New Record!'
+                    : 'All 6 Spots Complete'
+                  : `Fast-Break · R${Math.min(hud.currentRack + 1, RACKS_COUNT)}/${RACKS_COUNT} · ${activeRack.shortLabel}`}
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center bg-[#12161F]/92 border border-white/12 rounded-lg px-3 sm:px-5 py-1 sm:py-1.5">
+            <div className="flex flex-col items-center justify-center bg-[#07090E]/96 border border-white/25 rounded-[4px] px-3 sm:px-5 py-1 sm:py-1.5 shadow-lg backdrop-blur-sm flex-1 lg:flex-initial">
               <div
-                className={`font-mono text-2xl sm:text-3xl md:text-4xl font-bold leading-none tracking-tight tabular-nums ${
-                  isUrgent ? 'text-[#EF4444]' : 'text-[#F4EFE6]'
+                className={`font-mono text-xl sm:text-3xl md:text-4xl font-bold leading-none tracking-tight tabular-nums ${
+                  isUrgent ? 'text-[#FECACA]' : 'text-[#FFFFFF]'
                 }`}
               >
-                {hud.timeLeft.toFixed(1)}
+                {formatContestClock(hud.timeLeft)}
               </div>
-              <div className="text-[10px] sm:text-[11px] font-medium text-[#A5B0C2] mt-0.5 whitespace-nowrap">
-                R{Math.min(hud.currentRack + 1, 5)}/5 · {activeRack.shortLabel}
-                {hud.currentRack === hud.moneyRack ? ' · 2x Rack' : ''}
+              <div className="font-mono text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-[#E2E8F0] mt-1 whitespace-nowrap flex items-center gap-1">
+                {hud.mode === 'PVP' && hud.pvpMatch?.leagueName && (
+                  <span className="inline-flex items-center gap-0.5 text-[#00ffaa] font-bold">
+                    <Trophy className="w-2.5 h-2.5" />
+                    <span className="max-w-[82px] truncate">{hud.pvpMatch.leagueName}</span>
+                    <span>·</span>
+                  </span>
+                )}
+                <span>
+                  R{Math.min(hud.currentRack + 1, RACKS_COUNT)}/{RACKS_COUNT} · {activeRack.shortLabel}
+                  {hud.currentRack === hud.moneyRack || getRackBallCount(hud.currentRack) === 1
+                    ? ' · 2x'
+                    : ''}
+                </span>
               </div>
+            </div>
+          )}
+
+          {/* Compact Current Spot Ball Indicator for Mobile/Tablet (< lg) */}
+          {hud.mode !== 'PVP' && (
+            <div
+              className="flex lg:hidden items-center gap-1.5 bg-[#07090E]/96 border border-white/25 rounded-[4px] px-2.5 py-1.5 shadow-lg backdrop-blur-sm shrink-0"
+              aria-label={`${activeRack.label} shot tracker`}
+            >
+              {Array.from({ length: getRackBallCount(hud.currentRack) }).map((_, bIdx) => {
+                const slot = hud.balls[getSlotIndex(hud.currentRack, bIdx)];
+                if (!slot) return null;
+                const isActiveBall = hud.phase === 'PLAYING' && bIdx === hud.currentBall;
+                let fillClass = 'bg-white/30';
+                if (slot.status === 'MADE') {
+                  fillClass = slot.isMoney ? 'bg-[#FDE047]' : 'bg-[#00ffaa]';
+                } else if (slot.status === 'MISSED') {
+                  fillClass = 'bg-[#F87171]';
+                } else if (slot.status === 'IN_AIR') {
+                  fillClass = 'bg-[#FFFFFF]';
+                } else if (isActiveBall) {
+                  fillClass = 'bg-white';
+                }
+                return (
+                  <span
+                    key={bIdx}
+                    className={`w-2.5 h-2.5 rounded-full transition-colors ${fillClass} ${
+                      slot.isMoney ? 'ring-1 ring-[#FDE047] ring-offset-1 ring-offset-[#07090E]' : ''
+                    }`}
+                  />
+                );
+              })}
             </div>
           )}
 
           {/* Wind Direction & Intensity Gauge */}
           <div
-            className="flex flex-col justify-center bg-[#12161F]/92 border border-white/12 rounded-lg px-2.5 sm:px-3 py-1 sm:py-1.5 min-w-[78px] sm:min-w-[92px]"
+            className="flex flex-col justify-center bg-[#07090E]/96 border border-white/25 rounded-[4px] px-2.5 sm:px-3 py-1 sm:py-1.5 min-w-[78px] sm:min-w-[96px] shadow-lg backdrop-blur-sm shrink-0"
             aria-label={`Arena draft wind ${hud.wind.mph.toFixed(1)} mph ${hud.wind.dirLabel}`}
           >
-            <div className="flex items-center justify-between gap-1 text-[10px] text-[#94A3B8]">
-              <span className="flex items-center gap-1 font-medium">
-                <Wind className="w-3 h-3 text-[#38BDF8]" />
+            <div className="flex items-center justify-between gap-1 font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0]">
+              <span className="flex items-center gap-1 font-semibold">
+                <Wind className="w-3 h-3 text-[#00ffaa]" />
                 <span>Wind</span>
               </span>
-              <span className="font-mono font-semibold text-[#CBD5E1]">
-                {hud.wind.dirLabel}
-              </span>
+              <span className="font-bold text-[#FFFFFF]">{hud.wind.dirLabel}</span>
             </div>
-            <div className="flex items-center justify-between gap-1.5 mt-0.5">
+            <div className="flex items-center justify-between gap-1.5 mt-1">
               <span
-                className="inline-flex items-center justify-center w-4 h-4 rounded bg-white/6 shrink-0 transition-transform duration-150"
+                className="inline-flex items-center justify-center w-4 h-4 rounded-[2px] bg-white/15 shrink-0 transition-transform duration-150"
                 style={{
                   transform: `rotate(${(hud.wind.relativeAngleRad * 180) / Math.PI}deg)`,
                 }}
@@ -229,34 +432,34 @@ export const GameHud: React.FC<GameHudProps> = ({ hud, onToggleMute, onPause }) 
                 <ArrowRight
                   className={`w-3 h-3 ${
                     hud.wind.intensity >= 0.65
-                      ? 'text-[#F59E0B]'
+                      ? 'text-[#FEF08A]'
                       : hud.wind.intensity >= 0.32
-                        ? 'text-[#38BDF8]'
-                        : 'text-[#94A3B8]'
+                        ? 'text-[#00ffaa]'
+                        : 'text-[#FFFFFF]'
                   }`}
                 />
               </span>
               <span
                 className={`font-mono text-xs sm:text-sm font-bold leading-none tabular-nums ${
                   hud.wind.intensity >= 0.65
-                    ? 'text-[#F59E0B]'
+                    ? 'text-[#FEF08A]'
                     : hud.wind.intensity >= 0.32
-                      ? 'text-[#38BDF8]'
-                      : 'text-[#CBD5E1]'
+                      ? 'text-[#00ffaa]'
+                      : 'text-[#FFFFFF]'
                 }`}
               >
                 {hud.wind.mph.toFixed(1)}
-                <span className="text-[9px] font-normal text-[#94A3B8] ml-0.5">mph</span>
+                <span className="text-[9px] font-semibold text-[#E2E8F0] ml-0.5">mph</span>
               </span>
             </div>
-            <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mt-1">
+            <div className="w-full h-1 bg-white/20 rounded-[1px] overflow-hidden mt-1">
               <div
-                className={`h-full rounded-full transition-all duration-150 ${
+                className={`h-full transition-all duration-150 ${
                   hud.wind.intensity >= 0.65
-                    ? 'bg-[#F59E0B]'
+                    ? 'bg-[#FDE047]'
                     : hud.wind.intensity >= 0.32
-                      ? 'bg-[#38BDF8]'
-                      : 'bg-[#64748B]'
+                      ? 'bg-[#00ffaa]'
+                      : 'bg-white/75'
                 }`}
                 style={{ width: `${Math.max(8, Math.round(hud.wind.intensity * 100))}%` }}
               />
@@ -264,84 +467,92 @@ export const GameHud: React.FC<GameHudProps> = ({ hud, onToggleMute, onPause }) 
           </div>
         </motion.div>
 
-        {/* Right: Opponent Scoreboard (PVP) or 25-Ball Tracker + Audio/Pause Controls */}
+        {/* Right: 26-Ball Tracker + Instant Replay & Audio/Pause Controls */}
         <motion.div
           initial={{ opacity: 0, y: -16, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -12, scale: 0.96 }}
           transition={{ type: 'spring', stiffness: 360, damping: 28, delay: 0.1 }}
-          className="flex items-center gap-1.5 sm:gap-2"
+          className="flex items-center gap-1.5 sm:gap-2 order-2 lg:order-none"
         >
-          {hud.mode === 'PVP' && opponent ? (
-            <div className="flex items-stretch bg-[#12161F]/92 border border-[#3B82F6]/40 rounded-lg overflow-hidden">
-              <div className="px-2.5 sm:px-3 py-1.5 flex flex-col justify-center text-right">
-                <span className="text-[10px] sm:text-[11px] font-medium text-[#93C5FD] truncate max-w-[74px] sm:max-w-[110px]">
-                  {opponent.name}
-                </span>
-                <span className="font-mono text-xl sm:text-2xl font-bold leading-none text-[#F4EFE6] tabular-nums">
-                  {opponent.score}
-                </span>
-                {opponent.record && (
-                  <span className="font-mono text-[9px] text-[#94A3B8] tabular-nums mt-0.5">
-                    {opponent.record.wins}W-{opponent.record.losses}L-{opponent.record.draws}D
-                  </span>
-                )}
-              </div>
-              <div className="w-px bg-white/10" />
-              <div className="px-2 sm:px-3 py-1.5 flex flex-col justify-center text-right">
-                <span className="text-[10px] sm:text-[11px] font-medium text-[#94A3B8]">Mult</span>
-                <span className="font-mono text-lg sm:text-xl font-bold leading-none text-[#60A5FA] tabular-nums">
-                  {opponent.multiplier}x
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="hidden lg:flex items-center gap-2.5 bg-[#12161F]/92 border border-white/12 rounded-lg px-3.5 py-2.5">
-              {RACK_CONFIGS.map((rack) => {
-                const isCurrent = rack.id === hud.currentRack && hud.phase === 'PLAYING';
-                const startIdx = rack.id * BALLS_PER_RACK;
-                return (
-                  <div
-                    key={rack.id}
-                    className={`flex items-center gap-1 px-1 py-0.5 rounded transition-colors ${
-                      isCurrent ? 'bg-white/10' : ''
-                    }`}
-                  >
-                    {Array.from({ length: BALLS_PER_RACK }).map((_, bIdx) => {
-                      const slot = hud.balls[startIdx + bIdx];
-                      if (!slot) return null;
-                      const isActiveBall = isCurrent && bIdx === hud.currentBall;
-                      let fillClass = 'bg-white/18';
-                      if (slot.status === 'MADE') {
-                        fillClass = slot.isMoney ? 'bg-[#F59E0B]' : 'bg-[#10B981]';
-                      } else if (slot.status === 'MISSED') {
-                        fillClass = 'bg-[#EF4444]/65';
-                      } else if (slot.status === 'IN_AIR') {
-                        fillClass = 'bg-[#F9631C]';
-                      } else if (isActiveBall) {
-                        fillClass = 'bg-white';
-                      }
-                      return (
-                        <span
-                          key={bIdx}
-                          className={`w-2.5 h-2.5 rounded-full transition-colors ${fillClass} ${
-                            slot.isMoney ? 'ring-1 ring-[#F59E0B] ring-offset-1 ring-offset-[#12161F]' : ''
-                          }`}
-                        />
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <div className="hidden lg:flex items-center gap-2 bg-[#07090E]/96 border border-white/25 rounded-[4px] px-3 py-2.5 shadow-lg backdrop-blur-sm">
+            {RACK_CONFIGS.map((rack) => {
+              const isCurrent = rack.id === hud.currentRack && hud.phase === 'PLAYING';
+              const startIdx = getSlotIndex(rack.id, 0);
+              const rackCount = getRackBallCount(rack.id);
+              return (
+                <div
+                  key={rack.id}
+                  className={`flex items-center gap-1 px-1 py-0.5 rounded-[2px] transition-colors ${
+                    isCurrent ? 'bg-white/15' : ''
+                  }`}
+                  title={rack.label}
+                >
+                  {Array.from({ length: rackCount }).map((_, bIdx) => {
+                    const slot = hud.balls[startIdx + bIdx];
+                    if (!slot) return null;
+                    const isActiveBall = isCurrent && bIdx === hud.currentBall;
+                    let fillClass = 'bg-white/30';
+                    if (slot.status === 'MADE') {
+                      fillClass = slot.isMoney ? 'bg-[#FDE047]' : 'bg-[#00ffaa]';
+                    } else if (slot.status === 'MISSED') {
+                      fillClass = 'bg-[#F87171]';
+                    } else if (slot.status === 'IN_AIR') {
+                      fillClass = 'bg-[#FFFFFF]';
+                    } else if (isActiveBall) {
+                      fillClass = 'bg-white';
+                    }
+                    return (
+                      <span
+                        key={bIdx}
+                        className={`w-2.5 h-2.5 rounded-full transition-colors ${fillClass} ${
+                          slot.isMoney ? 'ring-1 ring-[#FDE047] ring-offset-1 ring-offset-[#07090E]' : ''
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            type="button"
+            onClick={onToggleInstantReplay}
+            aria-pressed={hud.instantReplayEnabled}
+            aria-label={
+              hud.instantReplayEnabled
+                ? 'Show Instant Replay enabled — plays slow-mo highlight after the game ends'
+                : 'Show Instant Replay disabled — tap to enable post-game slow-mo highlight'
+            }
+            title="Show Instant Replay (auto slow-mo cinematic replay of your best swish or buzzer-beater after the game)"
+            className={`pointer-events-auto flex items-center gap-1.5 h-11 sm:h-10 px-2.5 sm:px-3 rounded-[2px] border font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-lg shrink-0 ${
+              hud.instantReplayEnabled
+                ? 'bg-[#07090E]/96 border-[#00ffaa] text-[#00ffaa] hover:bg-[#00ffaa]/15'
+                : 'bg-[#07090E]/96 border-white/30 text-[#FFFFFF] hover:border-[#00ffaa]'
+            }`}
+          >
+            <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="hidden sm:inline whitespace-nowrap">Show Instant Replay</span>
+            <span className="sm:hidden whitespace-nowrap">Replay</span>
+            <span
+              className={`px-1 py-0.5 rounded-[2px] text-[9px] leading-none font-bold ${
+                hud.instantReplayEnabled
+                  ? 'bg-[#00ffaa] text-[#05070B]'
+                  : 'bg-white/20 text-[#FFFFFF]'
+              }`}
+            >
+              {hud.instantReplayEnabled ? 'ON' : 'OFF'}
+            </span>
+          </motion.button>
 
           <motion.button
             whileTap={{ scale: 0.92 }}
             type="button"
             onClick={onToggleMute}
             aria-label={hud.muted ? 'Unmute audio' : 'Mute audio'}
-            className="pointer-events-auto flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-[#12161F]/92 border border-white/12 text-[#F4EFE6] hover:border-white/30 transition-colors cursor-pointer"
+            className="pointer-events-auto flex items-center justify-center w-11 h-11 sm:w-10 sm:h-10 rounded-[2px] bg-[#07090E]/96 border border-white/30 text-[#FFFFFF] hover:border-[#00ffaa] transition-colors cursor-pointer shadow-lg shrink-0"
           >
             {hud.muted ? <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" /> : <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" />}
           </motion.button>
@@ -352,7 +563,7 @@ export const GameHud: React.FC<GameHudProps> = ({ hud, onToggleMute, onPause }) 
               type="button"
               onClick={onPause}
               aria-label="Pause contest"
-              className="pointer-events-auto flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-[#12161F]/92 border border-white/12 text-[#F4EFE6] hover:border-white/30 transition-colors cursor-pointer"
+              className="pointer-events-auto flex items-center justify-center w-11 h-11 sm:w-10 sm:h-10 rounded-[2px] bg-[#07090E]/96 border border-white/30 text-[#FFFFFF] hover:border-[#00ffaa] transition-colors cursor-pointer shadow-lg shrink-0"
             >
               <Pause className="w-4 h-4 sm:w-5 sm:h-5" />
             </motion.button>
@@ -360,9 +571,11 @@ export const GameHud: React.FC<GameHudProps> = ({ hud, onToggleMute, onPause }) 
         </motion.div>
       </div>
 
-      {/* Countdown Overlay Numeral */}
+      {/* Post-game-only replay: mid-game interruptions intentionally omitted */}
+
+      {/* Countdown Overlay Numeral (Non-PVP; PVP uses 15s side-by-side PvpIntroOverlay) */}
       <AnimatePresence mode="wait">
-        {hud.phase === 'COUNTDOWN' && (
+        {hud.phase === 'COUNTDOWN' && hud.mode !== 'PVP' && (
           <motion.div
             key={`cd-${hud.countdownValue}`}
             initial={{ opacity: 0, scale: 0.65, y: 12 }}
@@ -371,37 +584,140 @@ export const GameHud: React.FC<GameHudProps> = ({ hud, onToggleMute, onPause }) 
             transition={{ type: 'spring', stiffness: 420, damping: 24 }}
             className="my-auto mx-auto flex flex-col items-center text-center px-4"
           >
-            <div className="font-display text-7xl sm:text-8xl md:text-9xl font-extrabold text-[#F9631C] leading-none drop-shadow-[0_6px_24px_rgba(0,0,0,0.85)] tabular-nums">
+            <div className="font-display text-7xl sm:text-8xl md:text-9xl font-extrabold uppercase tracking-tight text-[#00ffaa] leading-none drop-shadow-[0_6px_24px_rgba(0,0,0,1)] tabular-nums">
               {hud.countdownValue > 0 ? hud.countdownValue : 'SHOOT!'}
             </div>
-            <div className="text-xs sm:text-sm font-medium text-[#F4EFE6] mt-2 bg-[#12161F]/85 px-3 py-1 rounded">
-              {hud.mode === 'PVP' && opponent
-                ? `1v1 vs ${opponent.name} · Hold & Release to shoot`
+            <div className="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-[#FFFFFF] mt-3 bg-[#07090E]/96 border border-white/30 px-4 py-2 rounded-[2px] shadow-lg">
+              {isFastBreak
+                ? 'Fast-Break Time Attack · Clear 5 racks + Half Court fast!'
                 : isHeatCheck
                   ? 'No Shot Clock · Moving Hoop · Don’t Miss'
-                  : 'Hold & Release in the green/gold zone'}
+                  : isPractice
+                    ? 'Practice Mode · No Clock · Aim for Gold Perfect Zone'
+                    : 'Hold & Release in the green/gold zone'}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Subtle Bottom Feedback Line */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 10 }}
-        transition={{ duration: 0.22, delay: 0.1 }}
-        className="flex items-center justify-between text-[11px] sm:text-xs text-[#94A3B8]"
-      >
-        <span>
-          Made {hud.madeCount}/{hud.attemptsCount} · Swishes {hud.swishCount}
-          {hud.isMovingToRack ? ' · Sprinting to next rack' : ''}
-        </span>
-        <span className="hidden sm:inline">
-          Hold Space or Touch/Click to shoot{hud.mode !== 'PVP' ? ' · Esc Pause' : ''}
-        </span>
-      </motion.div>
+      {/* Fast-Break Live 6-Spot Split-Timer Strip & Status Bar */}
+      <div className="flex flex-col gap-1.5">
+        {isFastBreak && hud.phase === 'PLAYING' && (
+          <div
+            className="mx-auto max-w-2xl w-full bg-[#07090E]/96 border border-[#00ffaa]/70 rounded-[4px] p-1.5 sm:p-2 shadow-lg backdrop-blur-sm"
+            aria-label="Fast-Break Live Spot Split Timers"
+          >
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5">
+              {hud.fastBreakSplits.map((split) => {
+                const isCompleted = split.cumulativeMs !== null;
+                const isActiveRack =
+                  hud.fastBreakFinishMs === null && split.rackIndex === hud.currentRack;
+                const prevCumulative =
+                  split.rackIndex > 0
+                    ? hud.fastBreakSplits[split.rackIndex - 1]?.cumulativeMs ?? 0
+                    : 0;
+                const liveLapMs = isActiveRack
+                  ? Math.max(0, hud.fastBreakElapsedMs - prevCumulative)
+                  : null;
+                const pbCumulative = hud.careerBaseline.bestFastBreakMs > 0
+                  ? hud.career.bestFastBreakSplitsMs[split.rackIndex] || 0
+                  : 0;
+
+                return (
+                  <div
+                    key={split.rackIndex}
+                    className={`min-w-0 rounded-[2px] px-1 sm:px-1.5 py-1 border text-center transition-colors ${
+                      isCompleted
+                        ? 'bg-[#00ffaa]/15 border-[#00ffaa]/75'
+                        : isActiveRack
+                          ? 'bg-white/15 border-[#FDE047]'
+                          : 'bg-[#05070B]/95 border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-0.5 font-mono text-[8px] sm:text-[10px] font-bold">
+                      <span className={`shrink-0 ${isActiveRack ? 'text-[#FEF08A]' : 'text-[#E2E8F0]'}`}>
+                        R{split.rackIndex + 1}
+                      </span>
+                      {isCompleted && split.deltaMs !== null ? (
+                        <span
+                          className={`tabular-nums truncate ${
+                            split.deltaMs <= 0 ? 'text-[#00ffaa]' : 'text-[#FECACA]'
+                          }`}
+                        >
+                          {formatSplitDeltaMs(split.deltaMs)}
+                        </span>
+                      ) : isActiveRack ? (
+                        <span className="text-[#FEF08A] truncate">PACE</span>
+                      ) : pbCumulative > 0 ? (
+                        <span className="text-[#CBD5E1] tabular-nums truncate">
+                          {formatFastBreakMs(pbCumulative)}
+                        </span>
+                      ) : (
+                        <span className="text-[#CBD5E1]">—</span>
+                      )}
+                    </div>
+                    <div
+                      className={`font-mono text-[10px] sm:text-xs font-bold tabular-nums mt-0.5 truncate ${
+                        isCompleted
+                          ? 'text-[#FFFFFF]'
+                          : isActiveRack
+                            ? 'text-[#00ffaa]'
+                            : 'text-[#CBD5E1]'
+                      }`}
+                    >
+                      {isCompleted && split.cumulativeMs !== null
+                        ? formatFastBreakMs(split.cumulativeMs)
+                        : isActiveRack && liveLapMs !== null
+                          ? formatFastBreakMs(liveLapMs)
+                          : '--.--'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {isPractice && hud.phase === 'PLAYING' && (
+          <div className="mx-auto max-w-md w-full bg-[#07090E]/96 border border-[#00ffaa]/75 rounded-[4px] px-3 py-2 flex items-center justify-between gap-2.5 text-xs shadow-lg backdrop-blur-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#FDE047] ring-2 ring-[#FEF08A]/70 shrink-0" />
+              <span className="text-[#FFFFFF] font-medium truncate">
+                {hud.lastTimingQuality === 'PERFECT'
+                  ? 'Perfect release! Right inside the gold sweet spot.'
+                  : hud.lastTimingQuality === 'GOOD'
+                    ? 'Good make! Hold a fraction closer to the gold center for Perfect.'
+                    : hud.lastTimingQuality === 'EARLY'
+                      ? 'Released Early — hold slightly longer until the bar enters Gold.'
+                      : hud.lastTimingQuality === 'LATE'
+                        ? 'Released Late — let go sooner right inside the Gold bracket.'
+                        : 'Hold Space or Touch Court · Release inside the highlighted Gold zone'}
+              </span>
+            </div>
+            <span className="font-mono text-[10px] font-bold text-[#00ffaa] whitespace-nowrap shrink-0">
+              {hud.lastTimingQuality ?? 'GUIDE ON'}
+            </span>
+          </div>
+        )}
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          transition={{ duration: 0.22, delay: 0.1 }}
+          className="flex items-center justify-between gap-2"
+        >
+          <span className="bg-[#07090E]/95 border border-white/25 backdrop-blur-sm px-2.5 py-1 rounded-[2px] font-mono text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold text-[#FFFFFF] tabular-nums shadow">
+            Made {hud.madeCount}/{hud.attemptsCount} · Swishes {hud.swishCount}
+            {hud.isMovingToRack ? ' · Sprinting to next rack' : ''}
+          </span>
+          <span className="sm:hidden bg-[#07090E]/95 border border-white/25 backdrop-blur-sm px-2.5 py-1 rounded-[2px] font-mono text-[10px] uppercase tracking-wider font-semibold text-[#E2E8F0] shadow">
+            Touch &amp; hold court
+          </span>
+          <span className="hidden sm:inline bg-[#07090E]/95 border border-white/25 backdrop-blur-sm px-2.5 py-1 rounded-[2px] font-mono text-[11px] uppercase tracking-wider font-semibold text-[#E2E8F0] shadow">
+            Hold Space or Touch/Click to shoot{hud.mode !== 'PVP' ? ' · Esc Pause' : ''}
+          </span>
+        </motion.div>
+      </div>
     </motion.div>
   );
 };
-

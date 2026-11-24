@@ -4,13 +4,16 @@ import {
   BACKBOARD_WIDTH,
   BACKBOARD_Y,
   BALL_RADIUS,
-  BALLS_PER_RACK,
   BASELINE_Y,
+  getRackBallCount,
+  getSlotIndex,
   HOOP_POS,
   METER_PERFECT_CENTER,
   RACK_CONFIGS,
   RIM_RADIUS,
+  STAMINA_EXHAUSTED_THRESHOLD,
 } from './constants';
+import { CourtThemeConfig, getCourtThemeConfig } from './courts';
 import {
   buildCameraBasis,
   CameraRig,
@@ -21,6 +24,7 @@ import {
 import {
   ActiveBall,
   BallSlotRecord,
+  CourtThemeId,
   DifficultyTier,
   Flashbulb,
   FloatingCallout,
@@ -29,6 +33,7 @@ import {
   OpponentGhostState,
   Particle,
   ProjectedPoint,
+  ShooterAnimState,
   Vec3,
 } from './types';
 
@@ -41,9 +46,14 @@ export interface RenderState {
   shooterZ: number;
   shooterFacing: { x: number; y: number };
   runPhase: number;
+  runBlend?: number;
   isMovingToRack: boolean;
+  shooterAnimState?: ShooterAnimState;
+  dribbleBlend?: number;
   gatherAmount: number;
   followThroughAmount: number;
+  landingSquat?: number;
+  ballPickupBlend?: number;
   isHoldingShot: boolean;
   meterValue: number;
   meterFeedbackTimer: number;
@@ -70,8 +80,14 @@ export interface RenderState {
   timeLeft: number;
   hasShotAnyBall: boolean;
   shooterName?: string;
+  shooterLabelAlpha: number;
   crowdHypeTimer?: number;
   crowdHypeDuration?: number;
+  stamina: number;
+  courtTheme: CourtThemeId;
+  hideShotMeter?: boolean;
+  sessionBestScore?: number;
+  sessionBestStreak?: number;
 }
 
 export function renderArena(
@@ -82,18 +98,41 @@ export function renderArena(
 ): void {
   ctx.save();
 
-  // Apply decaying camera shake
+  const exhaustion =
+    state.phase === 'PLAYING' && state.stamina < STAMINA_EXHAUSTED_THRESHOLD
+      ? Math.max(
+          0,
+          Math.min(1, (STAMINA_EXHAUSTED_THRESHOLD - state.stamina) / STAMINA_EXHAUSTED_THRESHOLD)
+        )
+      : 0;
+
+  // Apply decaying impact camera shake + subtle exhaustion tremor below 20% stamina
+  let shakeX = 0;
+  let shakeY = 0;
   if (state.screenShake > 0.01) {
-    const sx = (Math.random() - 0.5) * state.screenShake * 10;
-    const sy = (Math.random() - 0.5) * state.screenShake * 8;
-    ctx.translate(sx, sy);
+    shakeX += (Math.random() - 0.5) * state.screenShake * 10;
+    shakeY += (Math.random() - 0.5) * state.screenShake * 8;
   }
+  if (exhaustion > 0.01) {
+    const tremor = 0.35 + exhaustion * 0.65;
+    shakeX +=
+      (Math.sin(state.clockTime * 19.3) * 1.45 + Math.cos(state.clockTime * 31.7) * 0.75) *
+      tremor;
+    shakeY +=
+      (Math.cos(state.clockTime * 16.7) * 1.15 + Math.sin(state.clockTime * 27.1) * 0.65) *
+      tremor;
+  }
+  if (Math.abs(shakeX) > 0.01 || Math.abs(shakeY) > 0.01) {
+    ctx.translate(shakeX, shakeY);
+  }
+
+  const theme = getCourtThemeConfig(state.courtTheme);
 
   // 1. Arena Dark Backdrop & Crowd Bowl
   const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-  bgGrad.addColorStop(0, '#07090E');
-  bgGrad.addColorStop(0.45, '#0F1522');
-  bgGrad.addColorStop(1, '#121824');
+  bgGrad.addColorStop(0, theme.palette.bgStops[0]);
+  bgGrad.addColorStop(0.45, theme.palette.bgStops[1]);
+  bgGrad.addColorStop(1, theme.palette.bgStops[2]);
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
@@ -118,7 +157,8 @@ export function renderArena(
     hypeBurst,
     state.clockTime,
     dimFactor,
-    isClockActive && state.phase === 'PLAYING' ? state.timeLeft : 60
+    isClockActive && state.phase === 'PLAYING' ? state.timeLeft : 60,
+    theme
   );
   drawArenaCrowd(
     ctx,
@@ -127,7 +167,12 @@ export function renderArena(
     state.flashbulbs,
     state.clockTime,
     state.streak,
-    hypeBurst
+    hypeBurst,
+    theme,
+    state.sessionBestScore ?? 0,
+    state.sessionBestStreak ?? 0,
+    state.shooterName,
+    state.phase === 'TITLE' || state.phase === 'GAME_OVER'
   );
 
   if (dimFactor > 0.01) {
@@ -138,8 +183,8 @@ export function renderArena(
   // 2. Build 3D->2D camera basis
   const basis = buildCameraBasis(state.camera, width, height);
 
-  // 3. Draw Hardwood Court & Markings
-  drawCourtFloor(ctx, basis);
+  // 3. Draw Court Surface & Markings
+  drawCourtFloor(ctx, basis, theme);
 
   // In Heat Check mode, draw subtle court floor beacon under the relocated hoop for spatial clarity
   if (state.mode === 'HEAT_CHECK') {
@@ -176,7 +221,7 @@ export function renderArena(
   }
 
   // 4. Draw Stanchion anchored dynamically to moving hoopPos
-  drawStanchion(ctx, basis, state.hoopPos);
+  drawStanchion(ctx, basis, state.hoopPos, theme);
 
   // 5. Collect depth-sorted elements
   const drawables: { depth: number; draw: () => void }[] = [];
@@ -192,7 +237,7 @@ export function renderArena(
     if (p.visible) {
       drawables.push({
         depth: p.depth,
-        draw: () => drawBallRack(ctx, basis, r, state),
+        draw: () => drawBallRack(ctx, basis, r, state, theme),
       });
     }
   }
@@ -224,19 +269,37 @@ export function renderArena(
 
   // Hoop & Backboard depth anchor
   const hoopProj = projectPoint(basis, state.hoopPos);
+  const backboardDepth = hoopProj.visible ? hoopProj.depth + 1.35 : Number.POSITIVE_INFINITY;
   if (hoopProj.visible) {
     drawables.push({
-      depth: hoopProj.depth + 1.35,
-      draw: () => drawBackboard(ctx, basis, state.hoopPos, state.mode === 'HEAT_CHECK'),
+      depth: backboardDepth,
+      draw: () => drawBackboard(ctx, basis, state.hoopPos, state.mode === 'HEAT_CHECK', theme),
     });
     drawables.push({
       depth: hoopProj.depth + 0.15,
-      draw: () => drawHoopAndNet(ctx, basis, state, 'back'),
+      draw: () => drawHoopAndNet(ctx, basis, state, 'back', theme),
     });
     drawables.push({
       depth: hoopProj.depth - 0.15,
-      draw: () => drawHoopAndNet(ctx, basis, state, 'front'),
+      draw: () => drawHoopAndNet(ctx, basis, state, 'front', theme),
     });
+  }
+
+  // Hoop & Score Callouts (Swish, Money Ball, Buzzer Beater, etc.) positioned above & behind the backboard plane
+  for (const c of state.callouts) {
+    if (!c.behindBackboard) continue;
+    const progress = 1 - c.life / c.maxLife;
+    const cp = projectPoint(basis, {
+      x: c.worldPos.x,
+      y: c.worldPos.y,
+      z: c.worldPos.z + progress * 1.25,
+    });
+    if (cp.visible) {
+      drawables.push({
+        depth: hoopProj.visible ? Math.max(cp.depth, backboardDepth + 0.35) : cp.depth,
+        draw: () => drawBackgroundCallout(ctx, basis, width, height, state.hoopPos, c),
+      });
+    }
   }
 
   // Active balls in flight
@@ -270,13 +333,38 @@ export function renderArena(
   // 6. Burst Particles (rim/swish sparks)
   drawParticles(ctx, basis, state.particles);
 
+  // 6b. Subtle peripheral exhaustion vignette when stamina < 20%
+  if (exhaustion > 0.01) {
+    const pulse = 0.78 + 0.22 * Math.sin(state.clockTime * 5.2);
+    const edgeAlpha = (0.14 + exhaustion * 0.24) * pulse;
+    const exhVig = ctx.createRadialGradient(
+      width * 0.5,
+      height * 0.48,
+      Math.min(width, height) * 0.28,
+      width * 0.5,
+      height * 0.5,
+      Math.max(width, height) * 0.72
+    );
+    exhVig.addColorStop(0, 'rgba(18, 6, 10, 0)');
+    exhVig.addColorStop(0.68, `rgba(48, 10, 14, ${(edgeAlpha * 0.38).toFixed(3)})`);
+    exhVig.addColorStop(1, `rgba(127, 29, 29, ${edgeAlpha.toFixed(3)})`);
+    ctx.fillStyle = exhVig;
+    ctx.fillRect(-12, -12, width + 24, height + 24);
+  }
+
   // 7. Shot Timing Arc Meter
-  if (state.phase === 'PLAYING') {
+  if (state.phase === 'PLAYING' && !state.hideShotMeter) {
     drawShotMeter(ctx, basis, width, height, state);
   }
 
-  // 8. Floating Callouts
-  drawCallouts(ctx, basis, width, state.callouts);
+  // 8. Foreground Floating Callouts (shooter-side cues like Second Wind / Difficulty)
+  drawCallouts(
+    ctx,
+    basis,
+    width,
+    height,
+    state.callouts.filter((c) => !c.behindBackboard)
+  );
 
   ctx.restore();
 }
@@ -289,29 +377,31 @@ function drawArenaSpotlights(
   hypeBurst: number,
   clockTime: number,
   dimFactor: number,
-  timeLeft: number
+  timeLeft: number,
+  theme: CourtThemeConfig
 ): void {
   ctx.save();
   const sweep = hypeBurst > 0.02 ? Math.sin(clockTime * 4.5) * width * 0.06 * hypeBurst : 0;
   const sideScale = Math.max(0.28, 1 - dimFactor * 0.65);
   const centerBoost = 1 + dimFactor * 0.55;
   const beams = [
-    { x0: width * 0.22, x1: width * 0.36 + sweep, w: width * 0.24, mult: sideScale },
-    { x0: width * 0.5, x1: width * 0.5 - sweep * 0.6, w: width * (0.32 - dimFactor * 0.07), mult: centerBoost },
-    { x0: width * 0.78, x1: width * 0.64 + sweep, w: width * 0.24, mult: sideScale },
+    { x0: width * 0.22, x1: width * 0.36 + sweep, w: width * 0.24, mult: sideScale, isSec: true },
+    { x0: width * 0.5, x1: width * 0.5 - sweep * 0.6, w: width * (0.32 - dimFactor * 0.07), mult: centerBoost, isSec: false },
+    { x0: width * 0.78, x1: width * 0.64 + sweep, w: width * 0.24, mult: sideScale, isSec: true },
   ];
-  const baseAlpha = (streak >= 3 ? 0.085 : 0.055) + hypeBurst * 0.09;
+  const baseAlpha = (streak >= 3 ? 0.095 : 0.06) + hypeBurst * 0.09;
   for (const b of beams) {
     const warmAlpha = baseAlpha * b.mult;
+    const rgb = b.isSec ? theme.palette.spotlightSecondary : theme.palette.spotlightPrimary;
     const grad = ctx.createLinearGradient(b.x0, 0, b.x1, height * 0.8);
     grad.addColorStop(
       0,
       hypeBurst > 0.05
         ? `rgba(253, 212, 118, ${warmAlpha})`
-        : `rgba(255, 224, 178, ${warmAlpha})`
+        : `rgba(${rgb}, ${warmAlpha})`
     );
-    grad.addColorStop(0.7, `rgba(255, 210, 150, ${(0.015 + hypeBurst * 0.035) * b.mult})`);
-    grad.addColorStop(1, 'rgba(255, 210, 150, 0)');
+    grad.addColorStop(0.7, `rgba(${rgb}, ${(0.015 + hypeBurst * 0.035) * b.mult})`);
+    grad.addColorStop(1, `rgba(${rgb}, 0)`);
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.moveTo(b.x0 - b.w * 0.16, 0);
@@ -341,13 +431,217 @@ function drawArenaSpotlights(
       height * 0.28,
       width * 0.58
     );
-    horizonGlow.addColorStop(0, `rgba(245, 158, 11, ${hypeBurst * 0.22})`);
-    horizonGlow.addColorStop(0.55, `rgba(249, 99, 28, ${hypeBurst * 0.09})`);
+    horizonGlow.addColorStop(0, `rgba(${theme.palette.spotlightPrimary}, ${hypeBurst * 0.22})`);
+    horizonGlow.addColorStop(0.55, `rgba(${theme.palette.spotlightSecondary}, ${hypeBurst * 0.09})`);
     horizonGlow.addColorStop(1, 'rgba(249, 99, 28, 0)');
     ctx.fillStyle = horizonGlow;
     ctx.fillRect(0, 0, width, height * 0.55);
   }
   ctx.restore();
+}
+
+const bannerTextureCache = new Map<string, CanvasPattern | null>();
+
+function getArenaBannerPattern(
+  ctx: CanvasRenderingContext2D,
+  theme: CourtThemeConfig
+): CanvasPattern | null {
+  const cached = bannerTextureCache.get(theme.id);
+  if (cached !== undefined) return cached;
+  if (typeof document === 'undefined') return null;
+
+  const tile = document.createElement('canvas');
+  tile.width = 16;
+  tile.height = 16;
+  const tctx = tile.getContext('2d');
+  if (!tctx) {
+    bannerTextureCache.set(theme.id, null);
+    return null;
+  }
+
+  // Base dark banner surface
+  tctx.fillStyle = 'rgba(4, 6, 11, 0.97)';
+  tctx.fillRect(0, 0, 16, 16);
+
+  if (theme.palette.isOutdoorFence) {
+    // Diagonal vinyl weave texture for street blacktop fence banners
+    tctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    tctx.lineWidth = 1;
+    tctx.beginPath();
+    tctx.moveTo(0, 16);
+    tctx.lineTo(16, 0);
+    tctx.moveTo(-4, 4);
+    tctx.lineTo(4, -4);
+    tctx.moveTo(12, 20);
+    tctx.lineTo(20, 12);
+    tctx.stroke();
+  } else if (theme.palette.lineGlow) {
+    // LED pixel matrix + cyber scanline texture
+    tctx.fillStyle = `${theme.palette.accentHex}22`;
+    for (let y = 1; y < 16; y += 4) {
+      for (let x = 1; x < 16; x += 4) {
+        tctx.fillRect(x, y, 2, 2);
+      }
+    }
+    tctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+    tctx.fillRect(0, 2, 16, 1);
+    tctx.fillRect(0, 10, 16, 1);
+  } else {
+    // Classic arena ribbon LED dot-matrix & vertical seam texture
+    tctx.fillStyle = 'rgba(255, 255, 255, 0.055)';
+    for (let y = 1; y < 16; y += 4) {
+      for (let x = 1; x < 16; x += 4) {
+        tctx.fillRect(x, y, 1.5, 1.5);
+      }
+    }
+    tctx.fillStyle = `${theme.palette.accentHex}18`;
+    tctx.fillRect(0, 0, 1, 16);
+  }
+
+  const pattern = ctx.createPattern(tile, 'repeat');
+  bannerTextureCache.set(theme.id, pattern);
+  return pattern;
+}
+
+function drawArenaCrowdBanners(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  standTop: number,
+  standBot: number,
+  clockTime: number,
+  streak: number,
+  hypeBurst: number,
+  theme: CourtThemeConfig,
+  sessionBestScore: number,
+  sessionBestStreak: number,
+  shooterName?: string
+): void {
+  if (width < 260 || height < 180) return;
+
+  const isCompact = width < 560;
+  const standH = standBot - standTop;
+  const bannerH = Math.max(22, Math.min(38, Math.round(standH * 0.25)));
+  const bannerY = Math.round(standBot - bannerH - 3);
+  const sideMargin = isCompact ? 8 : Math.max(18, Math.round(width * 0.025));
+  const centerGap = isCompact ? Math.round(width * 0.26) : Math.max(180, Math.round(width * 0.28));
+  const panelW = Math.max(88, Math.floor((width - sideMargin * 2 - centerGap) * 0.5));
+  if (panelW < 84) return;
+
+  const leftX = sideMargin;
+  const rightX = width - sideMargin - panelW;
+  const pattern = getArenaBannerPattern(ctx, theme);
+  const pulse = 0.72 + 0.28 * Math.sin(clockTime * 3.1);
+  const cleanHandle = (shooterName || 'SHOOTER').trim().slice(0, 12).toUpperCase();
+
+  const drawPanel = (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    label: string,
+    valueText: string,
+    accentColor: string,
+    alignRight: boolean,
+    highlightGlow: boolean
+  ) => {
+    ctx.save();
+
+    // Panel drop shadow into bleachers
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+    ctx.beginPath();
+    ctx.roundRect(x, y + 2, w, h, 3);
+    ctx.fill();
+
+    // Textured LED / woven banner fill
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 3);
+    ctx.fillStyle = pattern ?? 'rgba(4, 6, 11, 0.97)';
+    ctx.fill();
+
+    // Subtle glossy sweep along top edge
+    const sheen = ctx.createLinearGradient(x, y, x, y + h);
+    sheen.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+    sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+    sheen.addColorStop(1, 'rgba(0, 0, 0, 0.35)');
+    ctx.fillStyle = sheen;
+    ctx.fill();
+
+    // Border & animated accent trim
+    ctx.strokeStyle = highlightGlow ? accentColor : 'rgba(255, 255, 255, 0.32)';
+    ctx.lineWidth = highlightGlow ? 1.5 : 1.15;
+    ctx.stroke();
+
+    // Accent power bar on outer side
+    const barW = 3;
+    const barX = alignRight ? x + w - barW : x;
+    ctx.fillStyle = accentColor;
+    ctx.globalAlpha = highlightGlow ? 1 : 0.85 * pulse;
+    ctx.fillRect(barX, y + 3, barW, h - 6);
+
+    // Corner grommets / rivets for tactile physical feel
+    ctx.globalAlpha = 0.65;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(x + 4, y + 3, 2, 2);
+    ctx.fillRect(x + w - 6, y + 3, 2, 2);
+
+    ctx.globalAlpha = 1;
+    const padX = isCompact ? 8 : 11;
+    const textX = alignRight ? x + w - padX : x + padX;
+    ctx.textAlign = alignRight ? 'right' : 'left';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+
+    const labelSize = isCompact ? 7.5 : 9;
+    const valSize = isCompact ? 11.5 : 14;
+    ctx.font = `700 ${labelSize}px "JetBrains Mono", monospace`;
+    ctx.strokeStyle = '#030508';
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(label, textX, y + h * 0.31, w - padX * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(label, textX, y + h * 0.31, w - padX * 2);
+
+    ctx.font = `800 ${valSize}px "JetBrains Mono", monospace`;
+    if (highlightGlow) {
+      ctx.shadowColor = accentColor;
+      ctx.shadowBlur = 8;
+    }
+    ctx.strokeStyle = '#030508';
+    ctx.lineWidth = 2.8;
+    ctx.strokeText(valueText, textX, y + h * 0.7, w - padX * 2);
+    ctx.fillStyle = accentColor;
+    ctx.fillText(valueText, textX, y + h * 0.7, w - padX * 2);
+
+    ctx.restore();
+  };
+
+  const scoreAccent = sessionBestScore > 0 ? '#00FFAA' : '#FFFFFF';
+  const streakHot = sessionBestStreak >= 3 || streak >= 3 || hypeBurst > 0.1;
+  const streakAccent = streakHot ? '#FEF08A' : '#FFFFFF';
+
+  drawPanel(
+    leftX,
+    bannerY,
+    panelW,
+    bannerH,
+    isCompact ? 'TOP SCORE' : `${cleanHandle} · TOP SCORE`,
+    `${sessionBestScore} PTS`,
+    scoreAccent,
+    false,
+    sessionBestScore > 0
+  );
+
+  drawPanel(
+    rightX,
+    bannerY,
+    panelW,
+    bannerH,
+    isCompact ? 'BEST STREAK' : 'SESSION BEST STREAK',
+    `${sessionBestStreak} ${sessionBestStreak === 1 ? 'MAKE' : 'STREAK'}`,
+    streakAccent,
+    true,
+    streakHot
+  );
 }
 
 function drawArenaCrowd(
@@ -357,14 +651,39 @@ function drawArenaCrowd(
   flashbulbs: Flashbulb[],
   clockTime: number,
   streak: number,
-  hypeBurst: number
+  hypeBurst: number,
+  theme: CourtThemeConfig,
+  sessionBestScore: number,
+  sessionBestStreak: number,
+  shooterName?: string,
+  showCrowdBanners: boolean = false
 ): void {
   ctx.save();
   const standTop = height * 0.14;
   const standBot = height * 0.44;
   const standHeight = standBot - standTop;
-  ctx.fillStyle = '#0D111A';
+  ctx.fillStyle = theme.palette.standBg;
   ctx.fillRect(0, standTop, width, standHeight);
+
+  // Subtle park chain-link perimeter mesh behind the baseline on Street Asphalt
+  if (theme.palette.isOutdoorFence) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.11)';
+    ctx.lineWidth = 1;
+    const step = 22;
+    for (let x = -standHeight; x < width + standHeight; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, standTop);
+      ctx.lineTo(x + standHeight * 0.7, standBot);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(x + standHeight * 0.7, standTop);
+      ctx.lineTo(x, standBot);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   // Tiered bleacher risers + subtle silhouetted spectators
   const rows = 7;
@@ -378,7 +697,7 @@ function drawArenaCrowd(
     ctx.strokeStyle =
       hypeBurst > 0.08
         ? `rgba(245, 158, 11, ${0.035 + hypeBurst * 0.12})`
-        : 'rgba(255, 255, 255, 0.035)';
+        : theme.palette.standRowLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, y);
@@ -449,23 +768,43 @@ function drawArenaCrowd(
     ctx.arc(fx, fy, r, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  // Personalized session banners shown outside active live gameplay
+  if (showCrowdBanners) {
+    drawArenaCrowdBanners(
+      ctx,
+      width,
+      height,
+      standTop,
+      standBot,
+      clockTime,
+      streak,
+      hypeBurst,
+      theme,
+      sessionBestScore,
+      sessionBestStreak,
+      shooterName
+    );
+  }
   ctx.restore();
 }
 
 function drawCourtFloor(
   ctx: CanvasRenderingContext2D,
-  basis: ReturnType<typeof buildCameraBasis>
+  basis: ReturnType<typeof buildCameraBasis>,
+  theme: CourtThemeConfig
 ): void {
+  const { palette } = theme;
   drawWorldPolygon(
     ctx,
     basis,
     [
       { x: -34, y: -10, z: 0 },
       { x: 34, y: -10, z: 0 },
-      { x: 34, y: 38, z: 0 },
-      { x: -34, y: 38, z: 0 },
+      { x: 34, y: 56, z: 0 },
+      { x: -34, y: 56, z: 0 },
     ],
-    '#141C2B'
+    palette.apron
   );
 
   drawWorldPolygon(
@@ -474,13 +813,13 @@ function drawCourtFloor(
     [
       { x: -25, y: BASELINE_Y, z: 0 },
       { x: 25, y: BASELINE_Y, z: 0 },
-      { x: 25, y: 34, z: 0 },
-      { x: -25, y: 34, z: 0 },
+      { x: 25, y: 42.8, z: 0 },
+      { x: -25, y: 42.8, z: 0 },
     ],
-    '#C48447'
+    palette.plankColors[0]
   );
 
-  const plankColors = ['#C88A4E', '#BC7B3F', '#CE9156', '#C08044'];
+  const plankColors = palette.plankColors;
   const stripWidth = 2.5;
   for (let x = -25, idx = 0; x < 25; x += stripWidth, idx++) {
     const color = plankColors[idx % plankColors.length];
@@ -490,8 +829,8 @@ function drawCourtFloor(
       [
         { x, y: BASELINE_Y, z: 0 },
         { x: Math.min(25, x + stripWidth), y: BASELINE_Y, z: 0 },
-        { x: Math.min(25, x + stripWidth), y: 34, z: 0 },
-        { x, y: 34, z: 0 },
+        { x: Math.min(25, x + stripWidth), y: 42.8, z: 0 },
+        { x, y: 42.8, z: 0 },
       ],
       color
     );
@@ -506,8 +845,14 @@ function drawCourtFloor(
       { x: 8, y: 14.8, z: 0 },
       { x: -8, y: 14.8, z: 0 },
     ],
-    '#182741'
+    palette.paint
   );
+
+  ctx.save();
+  if (palette.lineGlow) {
+    ctx.shadowColor = palette.threeArcColor;
+    ctx.shadowBlur = 10;
+  }
 
   const ftCirclePts: Vec3[] = [];
   for (let i = 0; i <= 32; i++) {
@@ -518,17 +863,29 @@ function drawCourtFloor(
       z: 0,
     });
   }
-  drawWorldPolyline(ctx, basis, ftCirclePts, 'rgba(244, 239, 230, 0.85)', 2);
+  drawWorldPolyline(ctx, basis, ftCirclePts, palette.lineColor, 2);
 
-  const lineColor = 'rgba(244, 239, 230, 0.9)';
+  // Half-court center jump circle arc (curving onto active half-court from y = 42.8)
+  const centerCirclePts: Vec3[] = [];
+  for (let i = 0; i <= 24; i++) {
+    const a = Math.PI + (i / 24) * Math.PI;
+    centerCirclePts.push({
+      x: Math.cos(a) * 6,
+      y: 42.8 + Math.sin(a) * 6,
+      z: 0,
+    });
+  }
+  drawWorldPolyline(ctx, basis, centerCirclePts, palette.threeArcColor, 2.2);
+
+  const lineColor = palette.lineColor;
   drawWorldPolyline(
     ctx,
     basis,
     [
       { x: -25, y: BASELINE_Y, z: 0 },
       { x: 25, y: BASELINE_Y, z: 0 },
-      { x: 25, y: 34, z: 0 },
-      { x: -25, y: 34, z: 0 },
+      { x: 25, y: 42.8, z: 0 },
+      { x: -25, y: 42.8, z: 0 },
       { x: -25, y: BASELINE_Y, z: 0 },
     ],
     lineColor,
@@ -576,7 +933,8 @@ function drawCourtFloor(
   }
   threePts.push({ x: 22, y: cornerJoinY, z: 0 });
   threePts.push({ x: 22, y: BASELINE_Y, z: 0 });
-  drawWorldPolyline(ctx, basis, threePts, '#F8F4EC', 2.8);
+  drawWorldPolyline(ctx, basis, threePts, palette.threeArcColor, 2.8);
+  ctx.restore();
 
   for (const rack of RACK_CONFIGS) {
     const markerPts: Vec3[] = [];
@@ -588,14 +946,15 @@ function drawCourtFloor(
         z: 0,
       });
     }
-    drawWorldPolyline(ctx, basis, markerPts, 'rgba(249, 99, 28, 0.35)', 1.5);
+    drawWorldPolyline(ctx, basis, markerPts, `${palette.accentHex}59`, 1.5);
   }
 }
 
 function drawStanchion(
   ctx: CanvasRenderingContext2D,
   basis: ReturnType<typeof buildCameraBasis>,
-  hoopPos: Vec3
+  hoopPos: Vec3,
+  theme: CourtThemeConfig
 ): void {
   const ox = hoopPos.x;
   const oy = hoopPos.y;
@@ -611,7 +970,7 @@ function drawStanchion(
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  ctx.strokeStyle = '#181D29';
+  ctx.strokeStyle = theme.palette.stanchionColor;
   ctx.lineWidth = Math.max(8, topPost.scale * 0.95);
   ctx.beginPath();
   ctx.moveTo(baseBack.x, baseBack.y);
@@ -626,7 +985,7 @@ function drawStanchion(
   ctx.lineTo(armJoint.x, armJoint.y);
   ctx.stroke();
 
-  ctx.strokeStyle = '#202636';
+  ctx.strokeStyle = theme.palette.stanchionColor;
   ctx.lineWidth = Math.max(6, armJoint.scale * 0.65);
   ctx.beginPath();
   ctx.moveTo(topPost.x, topPost.y);
@@ -639,24 +998,51 @@ function drawBackboard(
   ctx: CanvasRenderingContext2D,
   basis: ReturnType<typeof buildCameraBasis>,
   hoopPos: Vec3,
-  highlightMove = false
+  highlightMove = false,
+  theme: CourtThemeConfig
 ): void {
   const ox = hoopPos.x;
   const oy = hoopPos.y + (BACKBOARD_Y - HOOP_POS.y);
   const oz = hoopPos.z - HOOP_POS.z;
   const hw = BACKBOARD_WIDTH * 0.5;
+  const corners: Vec3[] = [
+    { x: ox - hw, y: oy, z: BACKBOARD_BOTTOM_Z + oz },
+    { x: ox + hw, y: oy, z: BACKBOARD_BOTTOM_Z + oz },
+    { x: ox + hw, y: oy, z: BACKBOARD_TOP_Z + oz },
+    { x: ox - hw, y: oy, z: BACKBOARD_TOP_Z + oz },
+  ];
+
+  drawWorldPolygon(
+    ctx,
+    basis,
+    corners,
+    highlightMove ? 'rgba(245, 196, 120, 0.22)' : theme.palette.backboardGlass,
+    highlightMove ? 'rgba(253, 224, 150, 0.94)' : theme.palette.threeArcColor,
+    2.6
+  );
+
+  // Subtle diagonal glass specular reflection streaks so objects/alerts behind the glass show clear 3D depth
   drawWorldPolygon(
     ctx,
     basis,
     [
-      { x: ox - hw, y: oy, z: BACKBOARD_BOTTOM_Z + oz },
-      { x: ox + hw, y: oy, z: BACKBOARD_BOTTOM_Z + oz },
-      { x: ox + hw, y: oy, z: BACKBOARD_TOP_Z + oz },
-      { x: ox - hw, y: oy, z: BACKBOARD_TOP_Z + oz },
+      { x: ox - hw * 0.72, y: oy + 0.01, z: BACKBOARD_BOTTOM_Z + oz + 0.12 },
+      { x: ox - hw * 0.34, y: oy + 0.01, z: BACKBOARD_BOTTOM_Z + oz + 0.12 },
+      { x: ox + hw * 0.18, y: oy + 0.01, z: BACKBOARD_TOP_Z + oz - 0.12 },
+      { x: ox - hw * 0.2, y: oy + 0.01, z: BACKBOARD_TOP_Z + oz - 0.12 },
     ],
-    highlightMove ? 'rgba(245, 196, 120, 0.18)' : 'rgba(210, 232, 255, 0.16)',
-    highlightMove ? 'rgba(253, 224, 150, 0.94)' : 'rgba(248, 244, 236, 0.92)',
-    2.6
+    'rgba(255, 255, 255, 0.075)'
+  );
+  drawWorldPolygon(
+    ctx,
+    basis,
+    [
+      { x: ox + hw * 0.22, y: oy + 0.01, z: BACKBOARD_BOTTOM_Z + oz + 0.12 },
+      { x: ox + hw * 0.42, y: oy + 0.01, z: BACKBOARD_BOTTOM_Z + oz + 0.12 },
+      { x: ox + hw * 0.76, y: oy + 0.01, z: BACKBOARD_TOP_Z + oz - 0.12 },
+      { x: ox + hw * 0.56, y: oy + 0.01, z: BACKBOARD_TOP_Z + oz - 0.12 },
+    ],
+    'rgba(255, 255, 255, 0.05)'
   );
 
   drawWorldPolyline(
@@ -669,7 +1055,7 @@ function drawBackboard(
       { x: ox - 1.0, y: oy + 0.02, z: 11.5 + oz },
       { x: ox - 1.0, y: oy + 0.02, z: 10.0 + oz },
     ],
-    highlightMove ? 'rgba(245, 158, 11, 0.92)' : 'rgba(248, 244, 236, 0.85)',
+    highlightMove ? 'rgba(245, 158, 11, 0.92)' : theme.palette.threeArcColor,
     2
   );
 }
@@ -678,7 +1064,8 @@ function drawHoopAndNet(
   ctx: CanvasRenderingContext2D,
   basis: ReturnType<typeof buildCameraBasis>,
   state: RenderState,
-  half: 'back' | 'front'
+  half: 'back' | 'front',
+  theme: CourtThemeConfig
 ): void {
   const shakeOffset = state.rimShake * Math.sin(state.clockTime * 55) * 0.06;
   const hx = state.hoopPos.x;
@@ -735,7 +1122,7 @@ function drawHoopAndNet(
       ctx,
       basis,
       [topPt, midPt, botPt],
-      half === 'front' ? 'rgba(248, 244, 236, 0.88)' : 'rgba(248, 244, 236, 0.5)',
+      half === 'front' ? theme.palette.netFront : theme.palette.netBack,
       1.6
     );
   }
@@ -744,7 +1131,7 @@ function drawHoopAndNet(
     ctx,
     basis,
     rimPts,
-    state.mode === 'HEAT_CHECK' ? '#F59E0B' : '#F9631C',
+    state.mode === 'HEAT_CHECK' ? '#F59E0B' : theme.palette.rimColor,
     4.2
   );
 
@@ -756,7 +1143,7 @@ function drawHoopAndNet(
         { x: hx, y: hy - RIM_RADIUS, z: hoopZ },
         { x: hx, y: backboardY, z: hoopZ },
       ],
-      '#E04E0D',
+      theme.palette.rimBraceColor,
       5
     );
   }
@@ -766,9 +1153,12 @@ function drawBallRack(
   ctx: CanvasRenderingContext2D,
   basis: ReturnType<typeof buildCameraBasis>,
   rackIndex: number,
-  state: RenderState
+  state: RenderState,
+  theme: CourtThemeConfig
 ): void {
   const rack = RACK_CONFIGS[rackIndex];
+  const rackBallCount = getRackBallCount(rackIndex);
+  const isSinglePedestal = rackBallCount === 1;
   const rx = rack.x + rack.rackOffsetX;
   const ry = rack.y + rack.rackOffsetY;
 
@@ -776,7 +1166,7 @@ function drawBallRack(
   const tx = -rack.y / len;
   const ty = rack.x / len;
 
-  const railHalf = 1.65;
+  const railHalf = isSinglePedestal ? 0.45 : 1.65;
   const pLeftBot = projectPoint(basis, { x: rx - tx * railHalf, y: ry - ty * railHalf, z: 0 });
   const pRightBot = projectPoint(basis, { x: rx + tx * railHalf, y: ry + ty * railHalf, z: 0 });
   const pLeftTop = projectPoint(basis, { x: rx - tx * railHalf, y: ry - ty * railHalf, z: 2.8 });
@@ -786,19 +1176,72 @@ function drawBallRack(
 
   ctx.save();
   const isActiveRack = state.phase !== 'TITLE' && rackIndex === state.currentRack;
-  ctx.strokeStyle = isActiveRack ? '#5B677D' : '#353E50';
+  // Subtle court shooting-spot ring on active rack so players feel the exact plant zone
+  if (isActiveRack && (state.phase === 'PLAYING' || state.phase === 'COUNTDOWN')) {
+    const spotPts: ProjectedPoint[] = [];
+    const spotR = 1.45;
+    for (let i = 0; i <= 20; i++) {
+      const a = (i / 20) * Math.PI * 2;
+      spotPts.push(
+        projectPoint(basis, {
+          x: rack.x + Math.cos(a) * spotR,
+          y: rack.y + Math.sin(a) * spotR,
+          z: 0.03,
+        })
+      );
+    }
+    const visiblePts = spotPts.filter((p) => p.visible);
+    if (visiblePts.length >= 3) {
+      const pulse = state.isMovingToRack ? 0.5 + 0.5 * Math.sin(state.clockTime * 11) : 0.72;
+      ctx.strokeStyle = state.isMovingToRack
+        ? `rgba(253, 224, 71, ${(0.35 + pulse * 0.4).toFixed(3)})`
+        : isSinglePedestal
+          ? 'rgba(253, 224, 71, 0.7)'
+          : 'rgba(0, 255, 170, 0.45)';
+      ctx.lineWidth = state.isMovingToRack ? 2.2 : 1.8;
+      ctx.beginPath();
+      ctx.moveTo(visiblePts[0].x, visiblePts[0].y);
+      for (let i = 1; i < visiblePts.length; i++) {
+        ctx.lineTo(visiblePts[i].x, visiblePts[i].y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  ctx.strokeStyle = isActiveRack
+    ? isSinglePedestal
+      ? '#FDE047'
+      : theme.palette.rackActiveColor
+    : isSinglePedestal
+      ? '#F59E0B'
+      : theme.palette.rackColor;
   ctx.lineWidth = Math.max(2, pLeftTop.scale * 0.14);
   ctx.lineCap = 'round';
 
-  ctx.beginPath();
-  ctx.moveTo(pLeftBot.x, pLeftBot.y);
-  ctx.lineTo(pLeftTop.x, pLeftTop.y);
-  ctx.lineTo(pRightTop.x, pRightTop.y);
-  ctx.lineTo(pRightBot.x, pRightBot.y);
-  ctx.stroke();
+  if (isSinglePedestal) {
+    const pCenterBot = projectPoint(basis, { x: rx, y: ry, z: 0 });
+    const pCenterTop = projectPoint(basis, { x: rx, y: ry, z: 2.76 });
+    if (pCenterBot.visible && pCenterTop.visible) {
+      ctx.beginPath();
+      ctx.moveTo(pLeftBot.x, pLeftBot.y);
+      ctx.lineTo(pRightBot.x, pRightBot.y);
+      ctx.moveTo(pCenterBot.x, pCenterBot.y);
+      ctx.lineTo(pCenterTop.x, pCenterTop.y);
+      ctx.moveTo(pLeftTop.x, pLeftTop.y);
+      ctx.lineTo(pRightTop.x, pRightTop.y);
+      ctx.stroke();
+    }
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(pLeftBot.x, pLeftBot.y);
+    ctx.lineTo(pLeftTop.x, pLeftTop.y);
+    ctx.lineTo(pRightTop.x, pRightTop.y);
+    ctx.lineTo(pRightBot.x, pRightBot.y);
+    ctx.stroke();
+  }
 
-  const startIdx = rackIndex * BALLS_PER_RACK;
-  for (let b = 0; b < BALLS_PER_RACK; b++) {
+  const startIdx = getSlotIndex(rackIndex, 0);
+  for (let b = 0; b < rackBallCount; b++) {
     const slot = state.ballsRecord[startIdx + b];
     const isCurrentlyInHands =
       isActiveRack &&
@@ -807,7 +1250,7 @@ function drawBallRack(
       !state.isMovingToRack;
     if (!slot || slot.status !== 'PENDING' || isCurrentlyInHands) continue;
 
-    const u = (b - 2) * 0.72;
+    const u = (b - (rackBallCount - 1) * 0.5) * 0.72;
     const ballPos: Vec3 = {
       x: rx + tx * u,
       y: ry + ty * u,
@@ -987,10 +1430,14 @@ interface AthleteRenderParams {
   z: number;
   facing?: { x: number; y: number };
   runPhase?: number;
+  runBlend?: number;
   isMoving: boolean;
   isDribbling?: boolean;
+  dribbleBlend?: number;
   gatherAmount: number;
   followThroughAmount: number;
+  landingSquat?: number;
+  ballPickupBlend?: number;
   isHoldingShot: boolean;
   meterValue: number;
   streak: number;
@@ -1001,6 +1448,66 @@ interface AthleteRenderParams {
   heldBall: { isMoney: boolean } | null;
   isGhost?: boolean;
   labelTag?: string;
+  labelAlpha?: number;
+}
+
+function solveTwoBoneLimb(
+  root: Vec3,
+  target: Vec3,
+  len1: number,
+  len2: number,
+  poleDir: Vec3
+): { mid: Vec3; end: Vec3 } {
+  const dx = target.x - root.x;
+  const dy = target.y - root.y;
+  const dz = target.z - root.z;
+  const rawDist = Math.hypot(dx, dy, dz) || 0.001;
+  const minDist = Math.abs(len1 - len2) + 0.06;
+  const maxDist = len1 + len2 - 0.03;
+  const clampedDist = Math.max(minDist, Math.min(maxDist, rawDist));
+
+  const ux = dx / rawDist;
+  const uy = dy / rawDist;
+  const uz = dz / rawDist;
+
+  const end: Vec3 =
+    rawDist > maxDist || rawDist < minDist
+      ? {
+          x: root.x + ux * clampedDist,
+          y: root.y + uy * clampedDist,
+          z: root.z + uz * clampedDist,
+        }
+      : target;
+
+  const cosA = Math.max(
+    -1,
+    Math.min(1, (len1 * len1 + clampedDist * clampedDist - len2 * len2) / (2 * len1 * clampedDist))
+  );
+  const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+
+  // Project poleDir orthogonal to limb direction
+  const dotP = poleDir.x * ux + poleDir.y * uy + poleDir.z * uz;
+  let px = poleDir.x - ux * dotP;
+  let py = poleDir.y - uy * dotP;
+  let pz = poleDir.z - uz * dotP;
+  const pLen = Math.hypot(px, py, pz);
+  if (pLen > 0.0001) {
+    px /= pLen;
+    py /= pLen;
+    pz /= pLen;
+  } else {
+    px = 0;
+    py = 0;
+    pz = 1;
+  }
+
+  const mid: Vec3 = {
+    x: root.x + (ux * cosA + px * sinA) * len1,
+    y: root.y + (uy * cosA + py * sinA) * len1,
+    z: root.z + (uz * cosA + pz * sinA) * len1,
+  };
+
+  return { mid, end };
 }
 
 function drawStickLimb(
@@ -1040,10 +1547,14 @@ function drawAthleteModel(
     z: sz,
     facing,
     runPhase = 0,
+    runBlend,
     isMoving,
     isDribbling = false,
+    dribbleBlend,
     gatherAmount,
     followThroughAmount: ft,
+    landingSquat = 0,
+    ballPickupBlend = 0,
     isHoldingShot,
     meterValue,
     streak,
@@ -1054,6 +1565,7 @@ function drawAthleteModel(
     heldBall,
     isGhost = false,
     labelTag,
+    labelAlpha = 1,
   } = params;
 
   const sx = pos.x;
@@ -1067,23 +1579,108 @@ function drawAthleteModel(
   const rx = -fy;
   const ry = fx;
 
-  // Parabolic dribble bounce cycle: 1 at top palm, 0 on floor impact
-  const dribblePhase = (clockTime * 1.92) % 1;
+  const dribbleWeight = isDribbling
+    ? Math.max(0.28, Math.min(1, dribbleBlend ?? 1))
+    : 0;
+
+  // Escalating streak-based dribbling pattern & tempo
+  const dribbleTier = streak >= 9 ? 3 : streak >= 6 ? 2 : streak >= 3 ? 1 : 0;
+  const dribbleHz =
+    dribbleTier === 3 ? 3.95 : dribbleTier === 2 ? 3.22 : dribbleTier === 1 ? 2.58 : 2.05;
+  const rawDribbleClock = clockTime * dribbleHz;
+  const dribbleMod =
+    dribbleTier === 2
+      ? Math.sin(rawDribbleClock * Math.PI) * 0.08
+      : dribbleTier === 3
+        ? Math.sin(rawDribbleClock * Math.PI * 0.5) * 0.06
+        : 0;
+  const dribblePhase = (((rawDribbleClock + dribbleMod) % 1) + 1) % 1;
   const dNorm = Math.abs(dribblePhase * 2 - 1); // 0 at floor, 1 at hand
-  const dribbleBounce = isDribbling ? Math.pow(dNorm, 0.72) : 1;
-  const dribbleKneeDip = isDribbling ? (1 - dribbleBounce) * 0.22 : 0;
+  const dribblePowerCurve = dribbleTier >= 2 ? 0.6 : dribbleTier === 1 ? 0.65 : 0.7;
+  const dribbleBounce = isDribbling ? Math.pow(dNorm, dribblePowerCurve) : 1;
 
-  const activePhase = isMoving ? runPhase : clockTime * 16;
-  const strideSin = isMoving ? Math.sin(activePhase) : 0;
-  const strideCos = isMoving ? Math.cos(activePhase) : 0;
-  const runBounce = isMoving ? Math.abs(strideSin) * 0.34 : 0;
+  // Pattern geometry: right-side athletic pound (0) -> V-crossover (1) -> rapid in-and-out hesi (2) -> speed blur (3)
+  let dribbleLat = 0.96;
+  let dribbleFwd = 0.76;
+  let dribblePeakZ = 2.74;
+  if (isDribbling) {
+    if (dribbleTier === 0) {
+      dribbleLat = 0.94 + Math.sin(clockTime * dribbleHz * Math.PI) * 0.08;
+      dribbleFwd = 0.76 + (1 - dribbleBounce) * 0.08;
+      dribblePeakZ = 2.72;
+    } else if (dribbleTier === 1) {
+      const crossWave = Math.cos(clockTime * dribbleHz * 0.5 * Math.PI * 2);
+      dribbleLat = crossWave * 0.94;
+      dribbleFwd = 0.8 + (1 - Math.abs(crossWave)) * 0.24;
+      dribblePeakZ = 2.52;
+    } else if (dribbleTier === 2) {
+      dribbleLat =
+        Math.sin(clockTime * 5.2) * 0.72 + Math.cos(clockTime * 10.4) * 0.34;
+      dribbleFwd = 0.84 + Math.sin(clockTime * 6.8) * 0.18;
+      dribblePeakZ = 2.24;
+    } else if (dribbleTier === 3) {
+      dribbleLat = Math.sin(clockTime * 8.1) * 1.02;
+      dribbleFwd = 0.86 + Math.sin(clockTime * 16.2) * 0.22;
+      dribblePeakZ = 1.95;
+    }
+  }
 
-  const crouch = isMoving ? 0.14 : Math.max(gatherAmount * 0.74, dribbleKneeDip);
-  const breath = isMoving || sz > 0.1 ? 0 : Math.sin(clockTime * 2.8) * 0.04;
-  const stride = isMoving ? strideSin * 1.42 : 0;
-  const jumpKick = sz > 0.25 ? Math.min(0.46, sz * 0.22) : 0;
-  const heelLift = !isMoving && gatherAmount > 0.65 ? (gatherAmount - 0.65) * 0.36 : 0;
-  const shootTorque = isHoldingShot ? 0.15 : ft > 0 ? 0.12 * ft : isDribbling ? 0.08 : 0;
+  const dribbleKneeBase =
+    dribbleTier === 3 ? 0.44 : dribbleTier === 2 ? 0.38 : dribbleTier === 1 ? 0.32 : 0.26;
+  const dribbleKneeDip = isDribbling
+    ? ((1 - dribbleBounce) * dribbleKneeBase + 0.12 + dribbleTier * 0.07) * dribbleWeight
+    : 0;
+  const dribbleWeightShift = isDribbling
+    ? Math.sin(clockTime * dribbleHz * Math.PI) * (0.1 + dribbleTier * 0.04) * dribbleWeight
+    : 0;
+
+  const runMix = isMoving
+    ? Math.max(0.18, Math.min(1, runBlend ?? 1))
+    : Math.max(0, Math.min(1, runBlend ?? 0));
+  const isSprinting = runMix > 0.04;
+
+  const activePhase = isSprinting ? runPhase : 0;
+  const strideSin = isSprinting ? Math.sin(activePhase) : 0;
+  // Mid-stance compression (-1) -> toe-off flight peak (+1) aligned with asymmetric stance/swing phase
+  const strideFloat = isSprinting ? Math.cos(activePhase * 2 - 0.22) : 0;
+  const runBounce = isSprinting ? runMix * (0.14 + strideFloat * 0.34) : 0;
+
+  // Shooting triple-threat dip -> upward triple-extension -> elevated set-point -> gooseneck release
+  const clampedGather = Math.max(0, Math.min(1, gatherAmount));
+  const gatherEase = clampedGather * clampedGather * (3 - 2 * clampedGather);
+  const shotDipWave = isHoldingShot
+    ? Math.sin(Math.min(1, meterValue / 0.48) * Math.PI)
+    : 0;
+  const shotRiseProgress = isHoldingShot
+    ? 1 - Math.pow(1 - Math.max(0, Math.min(1, (meterValue - 0.16) / 0.6)), 2.25)
+    : ft > 0
+      ? 1
+      : 0;
+  const landBounce = landingSquat > 0 ? Math.sin(Math.min(1, landingSquat) * Math.PI * 0.5) : 0;
+
+  const shootCrouch = isHoldingShot
+    ? Math.max(gatherEase * 0.28, shotDipWave * 0.78 * (1 - shotRiseProgress * 0.62))
+    : landBounce * 0.68 + ballPickupBlend * 0.32;
+  const crouch = isSprinting
+    ? (0.28 + Math.max(0, -strideFloat) * 0.08) * runMix + shootCrouch * (1 - runMix)
+    : Math.max(shootCrouch, dribbleKneeDip);
+  const breath = isSprinting || sz > 0.1 || isDribbling ? 0 : Math.sin(clockTime * 2.8) * 0.04;
+  const jumpKick = sz > 0.08 ? Math.min(0.58, sz * 0.44) : 0;
+  const heelLift =
+    !isSprinting && sz <= 0.06 && isHoldingShot && meterValue > 0.3
+      ? Math.min(0.58, ((meterValue - 0.3) / 0.42) * 0.58)
+      : 0;
+  const shootTorque = isHoldingShot
+    ? 0.16 + shotRiseProgress * 0.14
+    : ft > 0
+      ? 0.26 * Math.min(1, ft * 1.9)
+      : isDribbling
+        ? (dribbleTier >= 2
+            ? Math.sin(clockTime * (dribbleTier === 3 ? 8.1 : 5.2)) * 0.18
+            : dribbleTier === 1
+              ? dribbleLat * 0.14
+              : 0.1 + (1 - dribbleBounce) * 0.06) * dribbleWeight
+        : 0;
 
   // Opponent Ghost aura intensity scales smoothly with streak (0 -> 1 across 0..9+)
   const ghostAuraPower = isGhost ? Math.min(1, streak / 9) : 0;
@@ -1099,7 +1696,7 @@ function drawAthleteModel(
   // Ground shadow + streak floor ring / opponent growing floor aura
   const shadowP = projectPoint(basis, { x: sx, y: sy, z: 0.02 });
   if (shadowP.visible) {
-    const airFactor = Math.max(0.45, 1 - (sz + runBounce * 0.5) * 0.22);
+    const airFactor = Math.max(0.45, 1 - (sz + Math.max(0, runBounce) * 0.5) * 0.22);
     const rad = shadowP.scale * 1.15 * airFactor;
     ctx.save();
     ctx.globalAlpha = isGhost ? Math.max(0.35, alpha) : alpha;
@@ -1157,183 +1754,441 @@ function drawAthleteModel(
     ctx.restore();
   }
 
-  // World joint positions (stick-figure proportions matching court height)
-  const stanceLeadR = isMoving ? 0 : 0.24;
-  const footLLift = isMoving ? Math.max(0, -strideSin) * 0.85 : heelLift * 0.45;
-  const footRLift = isMoving ? Math.max(0, strideSin) * 0.85 : heelLift * 0.55;
+  // World joint positions with 2-bone biomechanical leg & arm IK
+  const hipSway = isSprinting ? -strideSin * 0.14 * runMix : dribbleWeightShift;
   const bodyZ = sz + runBounce;
-
-  const footLWorld: Vec3 = {
-    x: sx - rx * 0.48 + fx * (-stanceLeadR * 0.5 + stride * 0.85 + jumpKick),
-    y: sy - ry * 0.48 + fy * (-stanceLeadR * 0.5 + stride * 0.85 + jumpKick),
-    z: sz + 0.06 + footLLift,
+  const hipWorld: Vec3 = {
+    x: sx + rx * hipSway + fx * (crouch * 0.06 + runMix * 0.1 - jumpKick * 0.14),
+    y: sy + ry * hipSway + fy * (crouch * 0.06 + runMix * 0.1 - jumpKick * 0.14),
+    z: bodyZ + 3.22 - crouch * 0.6 + breath * 0.3 + heelLift * 0.68,
   };
-  const footRWorld: Vec3 = {
-    x: sx + rx * 0.48 + fx * (stanceLeadR - stride * 0.85 + jumpKick * 1.15),
-    y: sy + ry * 0.48 + fy * (stanceLeadR - stride * 0.85 + jumpKick * 1.15),
-    z: sz + 0.06 + footRLift,
+  const hip = projectPoint(basis, hipWorld);
+
+  const THIGH_LEN = 1.66;
+  const SHIN_LEN = 1.64;
+
+  const computeRunLeg = (legPhase: number, sideSign: -1 | 1, idleLead: number) => {
+    const hipSocket: Vec3 = {
+      x: hipWorld.x + rx * (0.28 * sideSign),
+      y: hipWorld.y + ry * (0.28 * sideSign),
+      z: hipWorld.z - 0.05,
+    };
+    const kneePole: Vec3 = {
+      x: fx + rx * (0.18 * sideSign),
+      y: fy + ry * (0.18 * sideSign),
+      z: isSprinting ? 0.5 * runMix + 0.2 * (1 - runMix) : 0.24,
+    };
+
+    if (!isSprinting) {
+      const shooterStagger =
+        isHoldingShot || ft > 0 ? (sideSign > 0 ? 0.18 : -0.08) : 0;
+      const dribbleStanceLat = isDribbling ? 0.08 * dribbleWeight : 0;
+      const dribbleFootShift = isDribbling
+        ? Math.sin(clockTime * dribbleHz * Math.PI + (sideSign > 0 ? 0 : Math.PI)) *
+          0.08 *
+          dribbleWeight
+        : 0;
+      const sideLead =
+        idleLead +
+        shooterStagger +
+        dribbleFootShift +
+        jumpKick * (sideSign > 0 ? 1.04 : 0.74);
+      const ankleTarget: Vec3 = {
+        x: sx + rx * ((0.48 + dribbleStanceLat) * sideSign) + fx * sideLead,
+        y: sy + ry * ((0.48 + dribbleStanceLat) * sideSign) + fy * sideLead,
+        z: Math.max(
+          0.22,
+          sz + 0.24 + heelLift * (sideSign > 0 ? 0.94 : 0.78) - sz * 0.15
+        ),
+      };
+      const solved = solveTwoBoneLimb(hipSocket, ankleTarget, THIGH_LEN, SHIN_LEN, kneePole);
+      const toeDrop = sz > 0.1 ? Math.min(0.28, sz * 0.26) : 0;
+      const toeWorld: Vec3 = {
+        x: solved.end.x + fx * 0.52,
+        y: solved.end.y + fy * 0.52,
+        z: Math.max(0.04, solved.end.z - 0.18 - heelLift * 0.8 - toeDrop),
+      };
+      return { kneeWorld: solved.mid, ankleWorld: solved.end, toeWorld };
+    }
+
+    // Normalized gait phase u in [0, 1):
+    // [0.00..0.40] = Ground Stance & Toe-off Push | [0.40..1.00] = Heel-Kick Recovery & High Knee Drive
+    const u = (((legPhase / (Math.PI * 2)) % 1) + 1) % 1;
+    let footFwd = 0;
+    let ankleZ = 0.24;
+    let toeOffsetZ = -0.19;
+    let toeOffsetFwd = 0.52;
+
+    if (u < 0.4) {
+      const st = u / 0.4; // 0 (front strike) -> 1 (rear toe-off)
+      footFwd = 1.68 - st * 3.32;
+      if (st < 0.15) {
+        // Crisp strike into flat plant
+        const strike = 1 - st / 0.15;
+        ankleZ = 0.24 + strike * 0.12;
+        toeOffsetZ = -0.18 + strike * 0.2;
+      } else if (st > 0.58) {
+        // Explosive toe-off roll: heel rises while toe drives off hardwood
+        const push = (st - 0.58) / 0.42;
+        ankleZ = 0.24 + push * 0.52;
+        toeOffsetZ = -0.19 - push * 0.3;
+        toeOffsetFwd = 0.52 - push * 0.18;
+      } else {
+        ankleZ = 0.24;
+        toeOffsetZ = -0.19;
+      }
+    } else {
+      const sw = (u - 0.4) / 0.6; // 0 (toe-off) -> 1 (next strike)
+      if (sw < 0.35) {
+        // Early recovery: rapid heel tuck behind hips
+        const k = sw / 0.35;
+        const smoothK = k * k * (3 - 2 * k);
+        footFwd = -1.64 + smoothK * 0.72;
+        ankleZ = 0.74 + Math.sin(k * Math.PI * 0.5) * 1.24;
+        toeOffsetZ = -0.4;
+        toeOffsetFwd = 0.34;
+      } else if (sw < 0.78) {
+        // Mid-swing: high knee drive & shin cycling forward cleanly
+        const m = (sw - 0.35) / 0.43;
+        const smoothM = m * m * (3 - 2 * m);
+        footFwd = -0.92 + smoothM * 1.84;
+        ankleZ = 1.98 - smoothM * 0.86;
+        toeOffsetZ = -0.22 + smoothM * 0.16;
+        toeOffsetFwd = 0.48;
+      } else {
+        // Terminal swing: shin extends forward into active front strike
+        const t = (sw - 0.78) / 0.22;
+        const smoothT = 1 - Math.pow(1 - t, 2);
+        footFwd = 0.92 + smoothT * 0.76;
+        ankleZ = 1.12 - smoothT * 0.76;
+        toeOffsetZ = -0.06 + smoothT * 0.06;
+        toeOffsetFwd = 0.52;
+      }
+    }
+
+    const blendedFwd = footFwd * runMix + idleLead * (1 - runMix);
+    const blendedAnkleZ = sz + ankleZ * runMix + 0.24 * (1 - runMix);
+    const ankleTarget: Vec3 = {
+      x: sx + rx * ((0.38 - 0.06 * runMix) * sideSign + hipSway * 0.5) + fx * blendedFwd,
+      y: sy + ry * ((0.38 - 0.06 * runMix) * sideSign + hipSway * 0.5) + fy * blendedFwd,
+      z: blendedAnkleZ,
+    };
+
+    const solved = solveTwoBoneLimb(hipSocket, ankleTarget, THIGH_LEN, SHIN_LEN, kneePole);
+    const toeWorld: Vec3 = {
+      x: solved.end.x + fx * (toeOffsetFwd * runMix + 0.5 * (1 - runMix)),
+      y: solved.end.y + fy * (toeOffsetFwd * runMix + 0.5 * (1 - runMix)),
+      z: Math.max(0.04, solved.end.z + toeOffsetZ * runMix - 0.19 * (1 - runMix)),
+    };
+    return { kneeWorld: solved.mid, ankleWorld: solved.end, toeWorld };
   };
 
-  const kneeDriveL = isMoving ? Math.max(-0.25, strideSin) * 0.78 : crouch * 0.48;
-  const kneeDriveR = isMoving ? Math.max(-0.25, -strideSin) * 0.78 : crouch * 0.48;
+  const legL = computeRunLeg(activePhase, -1, -0.14);
+  const legR = computeRunLeg(activePhase + Math.PI, 1, 0.26);
 
-  const kneeL = projectPoint(basis, {
-    x: sx - rx * 0.44 + fx * (kneeDriveL + stride * 0.35 + jumpKick * 0.4),
-    y: sy - ry * 0.44 + fy * (kneeDriveL + stride * 0.35 + jumpKick * 0.4),
-    z: bodyZ + 1.66 - crouch * 0.34 + Math.max(0, strideSin) * (isMoving ? 0.36 : 0),
-  });
-  const kneeR = projectPoint(basis, {
-    x: sx + rx * 0.44 + fx * ((isMoving ? 0 : 0.12) + kneeDriveR - stride * 0.35 + jumpKick * 0.45),
-    y: sy + ry * 0.44 + fy * ((isMoving ? 0 : 0.12) + kneeDriveR - stride * 0.35 + jumpKick * 0.45),
-    z: bodyZ + 1.66 - crouch * 0.34 + Math.max(0, -strideSin) * (isMoving ? 0.36 : 0),
-  });
-  const ankleL = projectPoint(basis, {
-    x: footLWorld.x - fx * 0.04,
-    y: footLWorld.y - fy * 0.04,
-    z: footLWorld.z + 0.2,
-  });
-  const ankleR = projectPoint(basis, {
-    x: footRWorld.x - fx * 0.04,
-    y: footRWorld.y - fy * 0.04,
-    z: footRWorld.z + 0.2,
-  });
-  const toeL = projectPoint(basis, {
-    x: footLWorld.x + fx * 0.48,
-    y: footLWorld.y + fy * 0.48,
-    z: Math.max(0.04, footLWorld.z - heelLift * 0.42),
-  });
-  const toeR = projectPoint(basis, {
-    x: footRWorld.x + fx * 0.48,
-    y: footRWorld.y + fy * 0.48,
-    z: Math.max(0.04, footRWorld.z - heelLift * 0.5),
-  });
+  const kneeL = projectPoint(basis, legL.kneeWorld);
+  const kneeR = projectPoint(basis, legR.kneeWorld);
+  const ankleL = projectPoint(basis, legL.ankleWorld);
+  const ankleR = projectPoint(basis, legR.ankleWorld);
+  const toeL = projectPoint(basis, legL.toeWorld);
+  const toeR = projectPoint(basis, legR.toeWorld);
 
-  const hip = projectPoint(basis, {
-    x: sx + fx * (crouch * 0.04),
-    y: sy + fy * (crouch * 0.04),
-    z: bodyZ + 3.22 - crouch * 0.56 + breath * 0.3,
-  });
-
-  const torsoLean = isMoving ? 0.54 + Math.abs(strideCos) * 0.06 : crouch * 0.24 - ft * 0.1;
-  const torsoTwist = isMoving ? strideSin * 0.16 : shootTorque;
-  const shoulderZ = bodyZ + 5.18 - crouch * 0.66 + breath;
-  const shoulderCenter = projectPoint(basis, {
-    x: sx + fx * torsoLean,
-    y: sy + fy * torsoLean,
+  const torsoLean = isSprinting
+    ? (0.96 + Math.max(0, strideFloat) * 0.14) * runMix + crouch * 0.24 * (1 - runMix)
+    : isDribbling
+      ? (0.28 + (1 - dribbleBounce) * 0.1) * dribbleWeight + crouch * 0.14
+      : crouch * 0.25 - ft * 0.18 - Math.min(0.16, sz * 0.14);
+  const torsoTwist = isSprinting
+    ? Math.sin(activePhase + 0.15) * 0.42 * runMix + shootTorque * (1 - runMix)
+    : shootTorque;
+  const shoulderRollZ = isSprinting ? Math.sin(activePhase) * 0.14 * runMix : 0;
+  const shoulderZ =
+    bodyZ + 5.18 - crouch * 0.66 + breath + heelLift * 0.74 + (isSprinting ? -0.12 * runMix : 0);
+  const shoulderCenterWorld: Vec3 = {
+    x: sx + rx * (hipSway * 0.45) + fx * torsoLean,
+    y: sy + ry * (hipSway * 0.45) + fy * torsoLean,
     z: shoulderZ,
-  });
-  const shoulderL = projectPoint(basis, {
-    x: sx - rx * 0.72 + fx * (torsoLean - torsoTwist),
-    y: sy - ry * 0.72 + fy * (torsoLean - torsoTwist),
-    z: shoulderZ - 0.06,
-  });
-  const shoulderR = projectPoint(basis, {
-    x: sx + rx * 0.72 + fx * (torsoLean + torsoTwist),
-    y: sy + ry * 0.72 + fy * (torsoLean + torsoTwist),
-    z: shoulderZ - 0.06 + (isHoldingShot ? 0.08 : 0),
-  });
+  };
+  const releaseShoulderLift = ft > 0 ? Math.min(1, ft * 2.15) * 0.26 : 0;
+  const shoulderRWorld: Vec3 = {
+    x: sx + rx * (0.72 + hipSway * 0.45) + fx * (torsoLean + torsoTwist),
+    y: sy + ry * (0.72 + hipSway * 0.45) + fy * (torsoLean + torsoTwist),
+    z: shoulderZ - 0.06 + shoulderRollZ + (isHoldingShot ? 0.14 : 0) + releaseShoulderLift,
+  };
+  const shoulderLWorld: Vec3 = {
+    x: sx + rx * (-0.72 + hipSway * 0.45) + fx * (torsoLean - torsoTwist),
+    y: sy + ry * (-0.72 + hipSway * 0.45) + fy * (torsoLean - torsoTwist),
+    z: shoulderZ - 0.06 - shoulderRollZ,
+  };
+
+  const shoulderCenter = projectPoint(basis, shoulderCenterWorld);
+  const shoulderL = projectPoint(basis, shoulderLWorld);
+  const shoulderR = projectPoint(basis, shoulderRWorld);
+  const dribbleHeadBob = isDribbling ? (dribbleBounce - 0.5) * 0.11 * dribbleWeight : 0;
   const head = projectPoint(basis, {
-    x: sx + fx * (torsoLean + 0.14),
-    y: sy + fy * (torsoLean + 0.14),
-    z: bodyZ + 6.12 - crouch * 0.66 + breath * 1.1,
+    x: sx + rx * (hipSway * 0.22) + fx * (torsoLean + 0.24 * runMix + 0.1 * (1 - runMix)),
+    y: sy + ry * (hipSway * 0.22) + fy * (torsoLean + 0.24 * runMix + 0.1 * (1 - runMix)),
+    z:
+      bodyZ +
+      6.12 -
+      crouch * 0.64 +
+      breath * 1.1 +
+      dribbleHeadBob +
+      heelLift * 0.76 -
+      (isSprinting ? strideFloat * 0.06 * runMix : 0),
   });
+
+  const UPPER_ARM_LEN = 1.24;
+  const FOREARM_LEN = 1.18;
 
   let handRWorld: Vec3;
   let wristRWorld: Vec3;
   let elbowRWorld: Vec3;
   let handLWorld: Vec3;
+  let wristLWorld: Vec3;
   let elbowLWorld: Vec3;
 
-  if (isMoving) {
-    // Opposite arm-leg sprinting pump
-    const armPumpR = strideSin * 0.95; // right arm matches left leg forward
-    const armPumpL = -strideSin * 0.95;
-    elbowRWorld = {
-      x: sx + rx * 0.76 + fx * (torsoLean - 0.1 + armPumpR * 0.52),
-      y: sy + ry * 0.76 + fy * (torsoLean - 0.1 + armPumpR * 0.52),
-      z: bodyZ + 3.95 + Math.abs(armPumpR) * 0.15,
-    };
-    wristRWorld = {
-      x: elbowRWorld.x - rx * 0.08 + fx * (0.48 + Math.max(0, armPumpR) * 0.32),
-      y: elbowRWorld.y - ry * 0.08 + fy * (0.48 + Math.max(0, armPumpR) * 0.32),
-      z: elbowRWorld.z + 0.52 + armPumpR * 0.36,
-    };
-    handRWorld = {
-      x: wristRWorld.x + fx * 0.14,
-      y: wristRWorld.y + fy * 0.14,
-      z: wristRWorld.z + 0.16,
-    };
-    elbowLWorld = {
-      x: sx - rx * 0.76 + fx * (torsoLean - 0.1 + armPumpL * 0.52),
-      y: sy - ry * 0.76 + fy * (torsoLean - 0.1 + armPumpL * 0.52),
-      z: bodyZ + 3.95 + Math.abs(armPumpL) * 0.15,
-    };
-    handLWorld = {
-      x: elbowLWorld.x + rx * 0.08 + fx * (0.58 + Math.max(0, armPumpL) * 0.34),
-      y: elbowLWorld.y + ry * 0.08 + fy * (0.58 + Math.max(0, armPumpL) * 0.34),
-      z: elbowLWorld.z + 0.64 + armPumpL * 0.36,
-    };
-  } else if (isDribbling) {
-    // Procedural right-hand dribble rhythm with athletic off-arm guard
-    const handPush = Math.max(0.18, dribbleBounce);
-    const palmDrop = (1 - handPush) * 0.92;
-    handRWorld = {
-      x: sx + rx * 0.96 + fx * 0.64,
-      y: sy + ry * 0.96 + fy * 0.64,
-      z: sz + 3.96 - palmDrop - crouch * 0.45 + breath,
-    };
-    wristRWorld = {
-      x: handRWorld.x - fx * 0.12,
-      y: handRWorld.y - fy * 0.12,
-      z: handRWorld.z + 0.16,
-    };
-    elbowRWorld = {
-      x: sx + rx * 0.88 + fx * 0.28,
-      y: sy + ry * 0.88 + fy * 0.28,
-      z: sz + 4.46 - palmDrop * 0.38 - crouch * 0.48 + breath,
-    };
-    elbowLWorld = {
-      x: sx - rx * 0.84 + fx * 0.28,
-      y: sy - ry * 0.84 + fy * 0.28,
-      z: sz + 4.12 - crouch * 0.48 + breath,
-    };
-    handLWorld = {
-      x: sx - rx * 0.46 + fx * 0.72,
-      y: sy - ry * 0.46 + fy * 0.72,
-      z: sz + 4.02 + (1 - dribbleBounce) * 0.12 - crouch * 0.45 + breath,
-    };
-  } else {
-    // Shooting arm kinematics (triple-threat pocket -> high set point -> gooseneck release)
-    const armLift = isHoldingShot
-      ? 0.28 + Math.min(1, meterValue / 0.72) * 0.74
-      : ft > 0
-        ? 1.16
-        : 0.24;
+  if (isSprinting) {
+    // Athletic ~90-degree bent-arm cheek-to-hip sprint pump with 2-bone arm IK
+    const armDriveR = Math.sin(activePhase + 0.18); // right arm swings forward as left leg drives
+    const armDriveL = -armDriveR;
 
+    const buildSprintArm = (
+      shoulderPos: Vec3,
+      drive: number,
+      sideSign: -1 | 1
+    ): { elbow: Vec3; wrist: Vec3; hand: Vec3 } => {
+      const fwdSwing = Math.max(0, drive);
+      const backSwing = Math.max(0, -drive);
+      const wristTarget: Vec3 = {
+        x:
+          shoulderPos.x -
+          rx * sideSign * (0.08 + fwdSwing * 0.26) +
+          fx * (0.48 + fwdSwing * 0.72 - backSwing * 0.56) * runMix,
+        y:
+          shoulderPos.y -
+          ry * sideSign * (0.08 + fwdSwing * 0.26) +
+          fy * (0.48 + fwdSwing * 0.72 - backSwing * 0.56) * runMix,
+        z: shoulderPos.z - 0.42 + fwdSwing * 0.96 - backSwing * 0.34,
+      };
+      // Elbow pole always bends backward & downward behind torso
+      const armPole: Vec3 = {
+        x: -fx * 0.85 + rx * sideSign * 0.28,
+        y: -fy * 0.85 + ry * sideSign * 0.28,
+        z: -0.78,
+      };
+      const solved = solveTwoBoneLimb(
+        shoulderPos,
+        wristTarget,
+        UPPER_ARM_LEN,
+        FOREARM_LEN,
+        armPole
+      );
+      const hand: Vec3 = {
+        x: solved.end.x - rx * sideSign * 0.05 + fx * 0.14,
+        y: solved.end.y - ry * sideSign * 0.05 + fy * 0.14,
+        z: solved.end.z + 0.14 + fwdSwing * 0.1,
+      };
+      return { elbow: solved.mid, wrist: solved.end, hand };
+    };
+
+    const armR = buildSprintArm(shoulderRWorld, armDriveR, 1);
+    const armL = buildSprintArm(shoulderLWorld, armDriveL, -1);
+    elbowRWorld = armR.elbow;
+    wristRWorld = armR.wrist;
+    handRWorld = armR.hand;
+    elbowLWorld = armL.elbow;
+    wristLWorld = armL.wrist;
+    handLWorld = armL.hand;
+  } else if (isDribbling) {
+    // Streak-reactive 2-bone IK dribbling kinematics + rack ball-pickup reach
+    const handPush = Math.max(0.18, dribbleBounce);
+    const palmDrop = (1 - handPush) * (0.85 + dribbleTier * 0.12);
+    const activeRight = dribbleLat >= 0;
+    const pickupDip = ballPickupBlend * 0.46;
+    const ballTopZ =
+      sz +
+      (3.96 - dribbleTier * 0.16) -
+      palmDrop -
+      crouch * 0.45 -
+      pickupDip +
+      breath;
+    const ballTrackX = sx + rx * dribbleLat * 0.96 + fx * (dribbleFwd - 0.06);
+    const ballTrackY = sy + ry * dribbleLat * 0.96 + fy * (dribbleFwd - 0.06);
+
+    const dribblePoleR: Vec3 = { x: -fx * 0.45 + rx * 0.85, y: -fy * 0.45 + ry * 0.85, z: -0.35 };
+    const dribblePoleL: Vec3 = { x: -fx * 0.45 - rx * 0.85, y: -fy * 0.45 - ry * 0.85, z: -0.35 };
+
+    if (activeRight) {
+      const wristRTarget: Vec3 = {
+        x: ballTrackX - fx * 0.1,
+        y: ballTrackY - fy * 0.1,
+        z: ballTopZ + 0.14,
+      };
+      const solvedR = solveTwoBoneLimb(
+        shoulderRWorld,
+        wristRTarget,
+        UPPER_ARM_LEN,
+        FOREARM_LEN,
+        dribblePoleR
+      );
+      elbowRWorld = solvedR.mid;
+      wristRWorld = solvedR.end;
+      handRWorld = {
+        x: wristRWorld.x + fx * 0.12,
+        y: wristRWorld.y + fy * 0.12,
+        z: wristRWorld.z - 0.14,
+      };
+
+      const wristLTarget: Vec3 = {
+        x: sx - rx * (0.52 + dribbleTier * 0.08) + fx * 0.64,
+        y: sy - ry * (0.52 + dribbleTier * 0.08) + fy * 0.64,
+        z: sz + 4.02 - crouch * 0.45 - pickupDip * 0.6 + breath,
+      };
+      const solvedL = solveTwoBoneLimb(
+        shoulderLWorld,
+        wristLTarget,
+        UPPER_ARM_LEN,
+        FOREARM_LEN,
+        dribblePoleL
+      );
+      elbowLWorld = solvedL.mid;
+      wristLWorld = solvedL.end;
+      handLWorld = {
+        x: wristLWorld.x + fx * 0.1,
+        y: wristLWorld.y + fy * 0.1,
+        z: wristLWorld.z + (1 - dribbleBounce) * (0.12 + dribbleTier * 0.05),
+      };
+    } else {
+      const wristLTarget: Vec3 = {
+        x: ballTrackX - fx * 0.1,
+        y: ballTrackY - fy * 0.1,
+        z: ballTopZ + 0.14,
+      };
+      const solvedL = solveTwoBoneLimb(
+        shoulderLWorld,
+        wristLTarget,
+        UPPER_ARM_LEN,
+        FOREARM_LEN,
+        dribblePoleL
+      );
+      elbowLWorld = solvedL.mid;
+      wristLWorld = solvedL.end;
+      handLWorld = {
+        x: wristLWorld.x + fx * 0.12,
+        y: wristLWorld.y + fy * 0.12,
+        z: wristLWorld.z - 0.14,
+      };
+
+      const wristRTarget: Vec3 = {
+        x: sx + rx * 0.56 + fx * 0.62,
+        y: sy + ry * 0.56 + fy * 0.62,
+        z: sz + 4.04 - crouch * 0.45 - pickupDip * 0.6 + breath,
+      };
+      const solvedR = solveTwoBoneLimb(
+        shoulderRWorld,
+        wristRTarget,
+        UPPER_ARM_LEN,
+        FOREARM_LEN,
+        dribblePoleR
+      );
+      elbowRWorld = solvedR.mid;
+      wristRWorld = solvedR.end;
+      handRWorld = {
+        x: wristRWorld.x + fx * 0.1,
+        y: wristRWorld.y + fy * 0.1,
+        z: wristRWorld.z + (1 - dribbleBounce) * 0.14,
+      };
+    }
+  } else {
+    // Fluid 2-bone IK jump-shot stroke: shot-pocket dip -> forehead set point -> full release extension & gooseneck snap
+    const pocketLift = isHoldingShot
+      ? 0.14 + shotRiseProgress * 0.88
+      : ft > 0
+        ? 1.24
+        : 0.14;
+    const dipDrop = isHoldingShot
+      ? Math.sin(Math.min(1, meterValue / 0.42) * Math.PI) * 0.34
+      : 0;
+    const releaseExt = ft > 0 ? Math.min(1, ft * 2.2) : 0;
+    const pickupDrop = !isHoldingShot && ft <= 0 ? ballPickupBlend * 0.62 : 0;
+    const pickupSide = !isHoldingShot && ft <= 0 ? ballPickupBlend * 0.36 : 0;
+
+    // Right shooting wrist sweeps smoothly upward along vertical shot line above shoulder
+    const wristRTarget: Vec3 = {
+      x:
+        sx +
+        rx * (0.34 - pocketLift * 0.16 + pickupSide) +
+        fx * (0.58 + pocketLift * 0.48 + releaseExt * 0.24),
+      y:
+        sy +
+        ry * (0.34 - pocketLift * 0.16 + pickupSide) +
+        fy * (0.58 + pocketLift * 0.48 + releaseExt * 0.24),
+      z:
+        sz +
+        4.32 +
+        pocketLift * 2.66 +
+        releaseExt * 0.68 -
+        dipDrop -
+        pickupDrop -
+        crouch * 0.46 +
+        breath +
+        heelLift * 0.78,
+    };
+    // Shooting elbow stays tucked under the ball pointing forward toward the rim
+    const elbowRPole: Vec3 = {
+      x: fx * 0.92 + rx * 0.18,
+      y: fy * 0.92 + ry * 0.18,
+      z: -0.46,
+    };
+    const solvedR = solveTwoBoneLimb(
+      shoulderRWorld,
+      wristRTarget,
+      UPPER_ARM_LEN,
+      FOREARM_LEN,
+      elbowRPole
+    );
+    elbowRWorld = solvedR.mid;
+    wristRWorld = solvedR.end;
     handRWorld = {
-      x: sx + rx * (0.32 - armLift * 0.13) + fx * (0.54 + armLift * 0.74),
-      y: sy + ry * (0.32 - armLift * 0.13) + fy * (0.54 + armLift * 0.74),
-      z: sz + 4.38 + armLift * 2.86 - crouch * 0.48 + breath,
+      x: wristRWorld.x + fx * (0.1 + releaseExt * 0.22),
+      y: wristRWorld.y + fy * (0.1 + releaseExt * 0.22),
+      z: wristRWorld.z + (0.16 - releaseExt * 0.28),
     };
-    wristRWorld = {
-      x: handRWorld.x - fx * (0.12 + ft * 0.08),
-      y: handRWorld.y - fy * (0.12 + ft * 0.08),
-      z: handRWorld.z - (0.18 - ft * 0.06),
+
+    // Guide hand (left) cradles side of ball in pocket & peels off cleanly upon release
+    const guidePeel = ft > 0 ? 0.3 + Math.min(1, ft * 1.55) * 0.22 : 0;
+    const wristLTarget: Vec3 = {
+      x: sx - rx * (0.26 + guidePeel) + fx * (0.56 + Math.min(0.88, pocketLift) * 0.44),
+      y: sy - ry * (0.26 + guidePeel) + fy * (0.56 + Math.min(0.88, pocketLift) * 0.44),
+      z:
+        sz +
+        4.26 +
+        Math.min(0.88, pocketLift) * 2.48 -
+        dipDrop -
+        pickupDrop * 0.65 -
+        crouch * 0.46 +
+        breath +
+        heelLift * 0.78,
     };
-    elbowRWorld = {
-      x: sx + rx * 0.68 + fx * (0.38 + armLift * 0.32),
-      y: sy + ry * 0.68 + fy * (0.38 + armLift * 0.32),
-      z: sz + 4.2 + armLift * 1.64 - crouch * 0.52 + breath,
+    const elbowLPole: Vec3 = {
+      x: fx * 0.42 - rx * 0.84,
+      y: fy * 0.42 - ry * 0.84,
+      z: -0.52,
     };
+    const solvedL = solveTwoBoneLimb(
+      shoulderLWorld,
+      wristLTarget,
+      UPPER_ARM_LEN,
+      FOREARM_LEN,
+      elbowLPole
+    );
+    elbowLWorld = solvedL.mid;
+    wristLWorld = solvedL.end;
     handLWorld = {
-      x: sx - rx * (0.32 + ft * 0.3) + fx * (0.56 + armLift * 0.44),
-      y: sy - ry * (0.32 + ft * 0.3) + fy * (0.56 + armLift * 0.44),
-      z: sz + 4.34 + Math.min(0.84, armLift) * 2.4 - crouch * 0.48 + breath,
-    };
-    elbowLWorld = {
-      x: sx - rx * 0.82 + fx * 0.3,
-      y: sy - ry * 0.82 + fy * 0.3,
-      z: sz + 4.1 + Math.min(0.8, armLift) * 1.18 - crouch * 0.52 + breath,
+      x: wristLWorld.x + fx * (0.1 - guidePeel * 0.14),
+      y: wristLWorld.y + fy * (0.1 - guidePeel * 0.14),
+      z: wristLWorld.z + (0.15 + guidePeel * 0.08),
     };
   }
 
@@ -1341,6 +2196,7 @@ function drawAthleteModel(
   const wristR = projectPoint(basis, wristRWorld);
   const handR = projectPoint(basis, handRWorld);
   const elbowL = projectPoint(basis, elbowLWorld);
+  const wristL = projectPoint(basis, wristLWorld);
   const handL = projectPoint(basis, handLWorld);
 
   if (!hip.visible || !shoulderCenter.visible || !head.visible) return;
@@ -1414,16 +2270,61 @@ function drawAthleteModel(
     ctx.shadowBlur = Math.min(18, s * 0.45);
   }
 
-  // 1. Stick Legs (hip -> knee -> ankle -> toe)
+  // Subtle speed streaks trailing behind runner while sprinting
+  if (isSprinting && runMix > 0.35 && !isGhost) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    const streakSpecs = [
+      { z: bodyZ + 5.1, lat: 0.45, len: 1.55 },
+      { z: bodyZ + 3.6, lat: -0.5, len: 1.95 },
+      { z: bodyZ + 2.0, lat: 0.35, len: 1.35 },
+    ];
+    for (let i = 0; i < streakSpecs.length; i++) {
+      const sp = streakSpecs[i];
+      const pStart = projectPoint(basis, {
+        x: sx + rx * sp.lat - fx * 0.45,
+        y: sy + ry * sp.lat - fy * 0.45,
+        z: sp.z,
+      });
+      const pEnd = projectPoint(basis, {
+        x: sx + rx * sp.lat - fx * (0.45 + sp.len * runMix),
+        y: sy + ry * sp.lat - fy * (0.45 + sp.len * runMix),
+        z: sp.z,
+      });
+      if (!pStart.visible || !pEnd.visible) continue;
+      ctx.strokeStyle = i === 1 ? accentColor : 'rgba(244, 239, 230, 0.72)';
+      ctx.globalAlpha = alpha * runMix * (i === 1 ? 0.34 : 0.22);
+      ctx.lineWidth = Math.max(1.2, lineW * 0.38);
+      ctx.beginPath();
+      ctx.moveTo(pStart.x, pStart.y);
+      ctx.lineTo(pEnd.x, pEnd.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 1. Stick Legs (hip -> knee -> ankle -> toe) + athletic sneaker accents
   drawStickLimb(ctx, [hip, kneeL, ankleL, toeL], lineW, activeStroke, outlineStyle);
   drawStickLimb(ctx, [hip, kneeR, ankleR, toeR], lineW, activeStroke, outlineStyle);
+  if (ankleL.visible && toeL.visible) {
+    drawStickLimb(ctx, [ankleL, toeL], Math.max(2.4, lineW * 1.15), accentColor);
+  }
+  if (ankleR.visible && toeR.visible) {
+    drawStickLimb(ctx, [ankleR, toeR], Math.max(2.4, lineW * 1.15), accentColor);
+  }
 
   // 2. Stick Spine, Neck & Shoulder Bar
   drawStickLimb(ctx, [hip, shoulderCenter, head], lineW * 1.08, activeStroke, outlineStyle);
   drawStickLimb(ctx, [shoulderL, shoulderCenter, shoulderR], lineW, activeStroke, outlineStyle);
 
   // 3. Guide Arm (left) & Shooting Arm (right)
-  drawStickLimb(ctx, [shoulderL, elbowL, handL], lineW * 0.9, activeStroke, outlineStyle);
+  drawStickLimb(
+    ctx,
+    [shoulderL, elbowL, wristL, handL],
+    lineW * 0.9,
+    activeStroke,
+    outlineStyle
+  );
   drawStickLimb(
     ctx,
     [shoulderR, elbowR, wristR, handR],
@@ -1432,14 +2333,18 @@ function drawAthleteModel(
     outlineStyle
   );
 
-  // Crisp gooseneck follow-through snap tip on release
-  if (ft > 0.12 && handR.visible) {
-    ctx.strokeStyle = activeStroke;
-    ctx.lineWidth = Math.max(1.8, lineW * 0.65);
-    ctx.beginPath();
-    ctx.moveTo(handR.x, handR.y);
-    ctx.lineTo(handR.x + headR * 0.28, handR.y + headR * 0.55 * Math.min(1, ft));
-    ctx.stroke();
+  // Crisp gooseneck follow-through snap tip on release (wrist flexion toward hoop)
+  if (ft > 0.08 && handR.visible && wristR.visible) {
+    const snapAmount = Math.min(1, ft * 1.9);
+    const snapWorld: Vec3 = {
+      x: handRWorld.x + fx * (0.3 * snapAmount),
+      y: handRWorld.y + fy * (0.3 * snapAmount),
+      z: handRWorld.z - 0.36 * snapAmount,
+    };
+    const snapPt = projectPoint(basis, snapWorld);
+    if (snapPt.visible) {
+      drawStickLimb(ctx, [handR, snapPt], Math.max(1.9, lineW * 0.68), activeStroke, outlineStyle);
+    }
   }
 
   // Subtle joint dots at knees/elbows/shoulders for clean stick articulation
@@ -1470,12 +2375,12 @@ function drawAthleteModel(
   }
 
   // 5. Held or Procedural Dribbling Basketball
-  if (heldBall && ft <= 0.01 && sz < 0.3) {
+  if (heldBall && ft <= 0.01 && (isHoldingShot || sz < 0.35)) {
     if (isDribbling) {
       const dribbleBallPos: Vec3 = {
-        x: sx + rx * 1.0 + fx * 0.7,
-        y: sy + ry * 1.0 + fy * 0.7,
-        z: BALL_RADIUS + dribbleBounce * 2.88,
+        x: sx + rx * dribbleLat + fx * dribbleFwd,
+        y: sy + ry * dribbleLat + fy * dribbleFwd,
+        z: BALL_RADIUS + dribbleBounce * dribblePeakZ,
       };
       const dbShadow = projectPoint(basis, {
         x: dribbleBallPos.x,
@@ -1490,6 +2395,22 @@ function drawAthleteModel(
         ctx.beginPath();
         ctx.ellipse(dbShadow.x, dbShadow.y, sr * 1.12, sr * 0.52, 0, 0, Math.PI * 2);
         ctx.fill();
+        if (dribbleTier >= 2 && dribbleBounce < 0.22) {
+          ctx.strokeStyle =
+            dribbleTier >= 3 ? 'rgba(245, 158, 11, 0.55)' : 'rgba(249, 99, 28, 0.45)';
+          ctx.lineWidth = Math.max(1.2, dbShadow.scale * 0.06);
+          ctx.beginPath();
+          ctx.ellipse(
+            dbShadow.x,
+            dbShadow.y,
+            sr * (1.5 + (0.22 - dribbleBounce) * 2.2),
+            sr * (0.72 + (0.22 - dribbleBounce) * 1.1),
+            0,
+            0,
+            Math.PI * 2
+          );
+          ctx.stroke();
+        }
         ctx.restore();
       }
       const db = projectPoint(basis, dribbleBallPos);
@@ -1500,15 +2421,15 @@ function drawAthleteModel(
           db.y,
           BALL_RADIUS * db.scale,
           heldBall.isMoney,
-          clockTime * 4.5,
-          streak >= 3 ? 0.8 : 0
+          clockTime * (4.5 + dribbleTier * 2.4),
+          streak >= 6 ? 1.15 : streak >= 3 ? 0.85 : 0
         );
       }
     } else {
       const heldBallPos: Vec3 = {
-        x: handRWorld.x + fx * 0.22 - rx * 0.08,
-        y: handRWorld.y + fy * 0.22 - ry * 0.08,
-        z: handRWorld.z + 0.18,
+        x: (handRWorld.x + handLWorld.x) * 0.5 + fx * 0.16,
+        y: (handRWorld.y + handLWorld.y) * 0.5 + fy * 0.16,
+        z: handRWorld.z + 0.28,
       };
       const hb = projectPoint(basis, heldBallPos);
       if (hb.visible) {
@@ -1525,15 +2446,64 @@ function drawAthleteModel(
     }
   }
 
-  // Optional player tag above head (rival name + live streak state in PVP)
-  if (labelTag) {
+  // Optional floating player username tag above head (fades out cleanly during active shooting)
+  if (labelTag && (isGhost || labelAlpha > 0.015)) {
+    ctx.save();
     ctx.shadowBlur = 0;
-    ctx.globalAlpha = 0.95;
-    const tagText = streak >= 2 ? `${labelTag} · ${streak} STREAK` : labelTag;
-    ctx.font = '700 12px "DM Sans", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = streak >= 2 ? ghostAuraColors.hex : 'rgba(147, 197, 253, 0.94)';
-    ctx.fillText(tagText, head.x, head.y - headR - 10);
+    if (isGhost) {
+      ctx.globalAlpha = 0.98;
+      const tagText = streak >= 2 ? `${labelTag} · ${streak} STREAK` : labelTag;
+      const floatBob = Math.sin(clockTime * 2.2) * 1.2;
+      const labelY = head.y - headR - 14 + floatBob;
+      ctx.font = '700 12px "DM Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const textW = ctx.measureText(tagText).width;
+      const boxW = textW + 14;
+      const boxH = 20;
+      const boxX = head.x - boxW * 0.5;
+      const boxY = labelY - boxH * 0.5;
+
+      ctx.fillStyle = 'rgba(3, 5, 9, 0.97)';
+      ctx.strokeStyle =
+        streak >= 2 ? 'rgba(253, 224, 71, 0.95)' : 'rgba(125, 211, 252, 0.95)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = streak >= 2 ? '#FEF08A' : '#FFFFFF';
+      ctx.fillText(tagText, head.x, labelY + 0.5);
+    } else {
+      const clampedLabelAlpha = Math.max(0, Math.min(1, labelAlpha));
+      ctx.globalAlpha = alpha * clampedLabelAlpha;
+      const cleanName =
+        labelTag.length > 18 ? `${labelTag.slice(0, 17).trimEnd()}…` : labelTag;
+      const floatBob = Math.sin(clockTime * 2.2) * 1.4;
+      const labelY = head.y - headR - 14 + floatBob;
+      ctx.font = '700 12px "DM Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const textW = ctx.measureText(cleanName).width;
+      const boxW = textW + 14;
+      const boxH = 20;
+      const boxX = head.x - boxW * 0.5;
+      const boxY = labelY - boxH * 0.5;
+
+      ctx.fillStyle = 'rgba(3, 5, 9, 0.97)';
+      ctx.strokeStyle =
+        streak >= 3 ? 'rgba(253, 224, 71, 0.95)' : 'rgba(255, 255, 255, 0.45)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(cleanName, head.x, labelY + 0.5);
+    }
+    ctx.restore();
   }
 
   ctx.restore();
@@ -1551,9 +2521,9 @@ function drawShooter(
     (state.phase === 'PLAYING' || state.phase === 'COUNTDOWN') &&
     !state.isMovingToRack &&
     state.currentRack < RACK_CONFIGS.length &&
-    state.currentBall < BALLS_PER_RACK
+    state.currentBall < getRackBallCount(state.currentRack)
   ) {
-    const slotIndex = state.currentRack * BALLS_PER_RACK + state.currentBall;
+    const slotIndex = getSlotIndex(state.currentRack, state.currentBall);
     const slot = state.ballsRecord[slotIndex];
     if (slot && slot.status === 'PENDING') {
       heldBall = { isMoney: slot.isMoney };
@@ -1562,28 +2532,37 @@ function drawShooter(
 
   const isDribbling =
     Boolean(heldBall) &&
-    !state.isMovingToRack &&
-    !state.isHoldingShot &&
-    state.followThroughAmount <= 0.05 &&
-    state.shooterZ <= 0.08;
+    (state.shooterAnimState === 'DRIBBLING' ||
+      (!state.isMovingToRack &&
+        (state.runBlend ?? 0) < 0.1 &&
+        !state.isHoldingShot &&
+        state.followThroughAmount <= 0.05 &&
+        state.shooterZ <= 0.08 &&
+        (state.ballPickupBlend ?? 0) <= 0.05));
 
   drawAthleteModel(ctx, basis, {
     pos: state.shooterPos,
     z: state.shooterZ,
     facing: state.shooterFacing,
     runPhase: state.runPhase,
+    runBlend: state.runBlend,
     isMoving: state.isMovingToRack,
     isDribbling,
+    dribbleBlend: state.dribbleBlend ?? (isDribbling ? 1 : 0),
     gatherAmount: state.gatherAmount,
     followThroughAmount: state.followThroughAmount,
+    landingSquat: state.landingSquat ?? 0,
+    ballPickupBlend: state.ballPickupBlend ?? 0,
     isHoldingShot: state.isHoldingShot,
     meterValue: state.meterValue,
     streak: state.streak,
     clockTime: state.clockTime,
     strokeColor: '#F4EFE6',
-    accentColor: '#F9631C',
+    accentColor: '#00ffaa',
     alpha: 1.0,
     heldBall,
+    labelTag: state.shooterName?.trim() || 'Shooter',
+    labelAlpha: state.shooterLabelAlpha,
   });
 }
 
@@ -1593,10 +2572,17 @@ function drawOpponentGhost(
   ghost: OpponentGhostState,
   clockTime: number
 ): void {
+  const ghostMoving = Boolean(ghost.isMoving);
+  const ghostDribbling = !ghostMoving && ghost.z <= 0.08 && ghost.followThrough <= 0.05;
   drawAthleteModel(ctx, basis, {
     pos: ghost.pos,
     z: ghost.z,
-    isMoving: false,
+    facing: ghost.facing,
+    runPhase: ghost.runPhase ?? 0,
+    runBlend: ghost.runBlend ?? (ghostMoving ? 1 : 0),
+    isMoving: ghostMoving,
+    isDribbling: ghostDribbling,
+    dribbleBlend: ghostDribbling ? 1 : 0,
     gatherAmount: 0,
     followThroughAmount: ghost.followThrough,
     isHoldingShot: false,
@@ -1606,7 +2592,7 @@ function drawOpponentGhost(
     strokeColor: '#93C5FD',
     accentColor: ghost.streak >= 6 ? '#FBBF24' : '#38BDF8',
     alpha: 0.56,
-    heldBall: null,
+    heldBall: ghostDribbling ? { isMoney: false } : null,
     isGhost: true,
     labelTag: ghost.name,
   });
@@ -1619,7 +2605,9 @@ function drawShotMeter(
   viewportHeight: number,
   state: RenderState
 ): void {
-  const showMeter = state.isHoldingShot || state.meterFeedbackTimer > 0;
+  const isPracticeGuide =
+    state.mode === 'PRACTICE' && (state.phase === 'PLAYING' || state.phase === 'COUNTDOWN');
+  const showMeter = state.isHoldingShot || state.meterFeedbackTimer > 0 || isPracticeGuide;
   const anchorProj = projectPoint(basis, {
     x: state.shooterPos.x,
     y: state.shooterPos.y,
@@ -1635,15 +2623,48 @@ function drawShotMeter(
   const rawMy = anchorProj.y - 12;
 
   const mx = Math.max(radius + 22, Math.min(viewportWidth - radius - 22, rawMx));
-  const my = Math.max(radius + 96, Math.min(viewportHeight - 42, rawMy));
+  const my = Math.max(radius + 108, Math.min(viewportHeight - 54, rawMy));
 
   if (!showMeter) {
-    if (!state.hasShotAnyBall) {
+    if (state.isMovingToRack && state.phase === 'PLAYING') {
       ctx.save();
-      ctx.font = `700 ${isCompact ? 11 : 12}px "Barlow Condensed", sans-serif`;
+      const moveText = 'MOVING TO NEXT RACK';
+      ctx.font = `800 ${isCompact ? 10 : 11}px "Space Mono", monospace`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(244, 239, 230, 0.9)';
-      ctx.fillText(isCompact ? 'HOLD & RELEASE TO SHOOT' : 'HOLD SPACE / CLICK', mx, my - 10);
+      ctx.textBaseline = 'middle';
+      const promptW = ctx.measureText(moveText).width + 16;
+      const promptH = 22;
+      const px = Math.max(10, Math.min(viewportWidth - promptW - 10, mx - promptW * 0.5));
+      const py = my - 10 - promptH * 0.5;
+      ctx.fillStyle = 'rgba(3, 5, 9, 0.96)';
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.9)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.roundRect(px, py, promptW, promptH, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#FEF08A';
+      ctx.fillText(moveText, px + promptW * 0.5, py + promptH * 0.5 + 0.5);
+      ctx.restore();
+    } else if (!state.hasShotAnyBall) {
+      ctx.save();
+      const promptText = isCompact ? 'HOLD & RELEASE TO SHOOT' : 'HOLD SPACE / CLICK';
+      ctx.font = `700 ${isCompact ? 10 : 11}px "Space Mono", monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const promptW = ctx.measureText(promptText).width + 16;
+      const promptH = 22;
+      const px = Math.max(10, Math.min(viewportWidth - promptW - 10, mx - promptW * 0.5));
+      const py = my - 10 - promptH * 0.5;
+      ctx.fillStyle = 'rgba(3, 5, 9, 0.96)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.roundRect(px, py, promptW, promptH, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(promptText, px + promptW * 0.5, py + promptH * 0.5 + 0.5);
       ctx.restore();
     }
     return;
@@ -1653,7 +2674,12 @@ function drawShotMeter(
   const endAngle = Math.PI * 1.44;
   const span = endAngle - startAngle;
 
-  const activeVal = state.isHoldingShot ? state.meterValue : state.lastReleaseMeter;
+  const hasLiveOrFeedback = state.isHoldingShot || state.meterFeedbackTimer > 0;
+  const activeVal = state.isHoldingShot
+    ? state.meterValue
+    : state.meterFeedbackTimer > 0
+      ? state.lastReleaseMeter
+      : 0;
   const clampedVal = Math.max(0, Math.min(1.06, activeVal));
 
   const diff = state.difficulty;
@@ -1662,8 +2688,31 @@ function drawShotMeter(
   const perfStart = Math.max(0, METER_PERFECT_CENTER - diff.perfectHalfWindow);
   const perfEnd = Math.min(1, METER_PERFECT_CENTER + diff.perfectHalfWindow);
 
+  const perfStartAngle = startAngle + perfStart * span;
+  const perfEndAngle = startAngle + perfEnd * span;
+  const perfCenterAngle = startAngle + METER_PERFECT_CENTER * span;
+
+  const inPerf = hasLiveOrFeedback && clampedVal >= perfStart && clampedVal <= perfEnd;
+  const inMake = hasLiveOrFeedback && clampedVal >= makeStart && clampedVal <= makeEnd;
+  const approachingPerf =
+    state.isHoldingShot && clampedVal >= perfStart - 0.14 && clampedVal < perfStart;
+
   ctx.save();
   ctx.lineCap = 'round';
+
+  // Practice mode golden outer halo behind the Perfect Release Window
+  if (isPracticeGuide) {
+    const pulse = 0.5 + 0.5 * Math.sin(state.clockTime * (inPerf ? 18 : 5.5));
+    ctx.strokeStyle = inPerf
+      ? `rgba(253, 224, 71, ${0.65 + pulse * 0.3})`
+      : approachingPerf
+        ? `rgba(245, 158, 11, ${0.42 + pulse * 0.25})`
+        : `rgba(245, 158, 11, ${0.24 + pulse * 0.14})`;
+    ctx.lineWidth = (isCompact ? 18 : 22) + (inPerf ? 4 : 0);
+    ctx.beginPath();
+    ctx.arc(mx, my, radius, perfStartAngle, perfEndAngle);
+    ctx.stroke();
+  }
 
   ctx.strokeStyle = 'rgba(11, 14, 20, 0.85)';
   ctx.lineWidth = isCompact ? 13 : 15;
@@ -1683,35 +2732,117 @@ function drawShotMeter(
   ctx.arc(mx, my, radius, startAngle + makeStart * span, startAngle + makeEnd * span);
   ctx.stroke();
 
-  ctx.strokeStyle = '#F59E0B';
-  ctx.lineWidth = isCompact ? 10 : 12;
+  ctx.strokeStyle = isPracticeGuide && inPerf ? '#FDE047' : '#F59E0B';
+  ctx.lineWidth = isPracticeGuide ? (isCompact ? 12 : 14) : isCompact ? 10 : 12;
   ctx.beginPath();
-  ctx.arc(mx, my, radius, startAngle + perfStart * span, startAngle + perfEnd * span);
+  ctx.arc(mx, my, radius, perfStartAngle, perfEndAngle);
   ctx.stroke();
 
-  const fillAngle = startAngle + Math.min(1.03, clampedVal) * span;
-  const inPerf = clampedVal >= perfStart && clampedVal <= perfEnd;
-  const inMake = clampedVal >= makeStart && clampedVal <= makeEnd;
-  ctx.strokeStyle = inPerf ? '#FDE047' : inMake ? '#34D399' : '#F4EFE6';
-  ctx.lineWidth = isCompact ? 4.5 : 5;
-  ctx.beginPath();
-  ctx.arc(mx, my, radius, startAngle, fillAngle);
-  ctx.stroke();
+  // Practice mode crisp Perfect Window bracket boundaries & center sweet-spot tick
+  if (isPracticeGuide) {
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = '#FEF08A';
+    ctx.lineWidth = 2;
+    for (const boundaryAngle of [perfStartAngle, perfEndAngle]) {
+      ctx.beginPath();
+      ctx.moveTo(
+        mx + Math.cos(boundaryAngle) * (radius - 9),
+        my + Math.sin(boundaryAngle) * (radius - 9)
+      );
+      ctx.lineTo(
+        mx + Math.cos(boundaryAngle) * (radius + 9),
+        my + Math.sin(boundaryAngle) * (radius + 9)
+      );
+      ctx.stroke();
+    }
 
-  const nx1 = mx + Math.cos(fillAngle) * (radius - 9);
-  const ny1 = my + Math.sin(fillAngle) * (radius - 9);
-  const nx2 = mx + Math.cos(fillAngle) * (radius + 9);
-  const ny2 = my + Math.sin(fillAngle) * (radius + 9);
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(nx1, ny1);
-  ctx.lineTo(nx2, ny2);
-  ctx.stroke();
+    // Sweet-spot diamond/tick at METER_PERFECT_CENTER
+    const spotX = mx + Math.cos(perfCenterAngle) * (radius + 13);
+    const spotY = my + Math.sin(perfCenterAngle) * (radius + 13);
+    ctx.fillStyle = inPerf ? '#FDE047' : '#F59E0B';
+    ctx.beginPath();
+    ctx.arc(spotX, spotY, inPerf ? 4.5 : 3.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineCap = 'round';
+  }
+
+  if (hasLiveOrFeedback) {
+    const fillAngle = startAngle + Math.min(1.03, clampedVal) * span;
+    ctx.strokeStyle = inPerf ? '#FDE047' : inMake ? '#34D399' : '#F4EFE6';
+    ctx.lineWidth = isCompact ? 4.5 : 5;
+    ctx.beginPath();
+    ctx.arc(mx, my, radius, startAngle, fillAngle);
+    ctx.stroke();
+
+    const nx1 = mx + Math.cos(fillAngle) * (radius - 9);
+    const ny1 = my + Math.sin(fillAngle) * (radius - 9);
+    const nx2 = mx + Math.cos(fillAngle) * (radius + 9);
+    const ny2 = my + Math.sin(fillAngle) * (radius + 9);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(nx1, ny1);
+    ctx.lineTo(nx2, ny2);
+    ctx.stroke();
+  }
+
+  // Practice mode callout badge pointing to the Perfect Release Window
+  if (isPracticeGuide) {
+    const labelText = state.isHoldingShot
+      ? inPerf
+        ? 'NOW! RELEASE!'
+        : clampedVal > perfEnd
+          ? 'PAST GOLD · RELEASE'
+          : approachingPerf
+            ? 'ALMOST THERE...'
+            : 'HOLD TO GOLD'
+      : 'PERFECT WINDOW';
+    const badgeColor =
+      state.isHoldingShot && inPerf
+        ? '#FEF08A'
+        : state.isHoldingShot && clampedVal > perfEnd
+          ? '#FECACA'
+          : '#FDE047';
+
+    const pointerTargetX = mx + Math.cos(perfCenterAngle) * (radius + 17);
+    const pointerTargetY = my + Math.sin(perfCenterAngle) * (radius + 17);
+    const badgeW = isCompact ? 96 : 112;
+    const badgeH = 20;
+    const rawBadgeX = mx - badgeW * 0.5;
+    const badgeX = Math.max(10, Math.min(viewportWidth - badgeW - 10, rawBadgeX));
+    const badgeY = Math.max(82, my - radius - 34);
+
+    ctx.strokeStyle = badgeColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(badgeX + badgeW * 0.5, badgeY + badgeH);
+    ctx.lineTo(pointerTargetX, pointerTargetY);
+    ctx.stroke();
+
+    ctx.fillStyle =
+      state.isHoldingShot && inPerf ? '#FEF08A' : 'rgba(3, 5, 9, 0.97)';
+    ctx.strokeStyle = badgeColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = `800 ${isCompact ? 10 : 11}px "Barlow Condensed", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = state.isHoldingShot && inPerf ? '#030508' : badgeColor;
+    ctx.fillText(labelText, badgeX + badgeW * 0.5, badgeY + badgeH * 0.5 + 0.5);
+    ctx.textBaseline = 'alphabetic';
+  }
 
   if (!state.isHoldingShot && state.meterFeedbackTimer > 0 && state.lastReleaseLabel) {
-    ctx.font = `800 ${isCompact ? 14 : 16}px "Barlow Condensed", sans-serif`;
+    ctx.font = `800 ${isCompact ? 15 : 17}px "Barlow Condensed", sans-serif`;
     ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#030508';
+    ctx.lineWidth = isCompact ? 5.5 : 6.5;
+    ctx.strokeText(state.lastReleaseLabel, mx, my + 22);
     ctx.fillStyle = state.lastReleaseColor;
     ctx.fillText(state.lastReleaseLabel, mx, my + 22);
   }
@@ -1791,14 +2922,81 @@ function drawParticles(
   ctx.restore();
 }
 
+function drawBackgroundCallout(
+  ctx: CanvasRenderingContext2D,
+  basis: ReturnType<typeof buildCameraBasis>,
+  viewportWidth: number,
+  viewportHeight: number,
+  hoopPos: Vec3,
+  c: FloatingCallout
+): void {
+  const progress = Math.max(0, Math.min(1, 1 - c.life / c.maxLife));
+  const alpha = c.life < 0.25 ? c.life / 0.25 : 1;
+  const p = projectPoint(basis, {
+    x: c.worldPos.x,
+    y: c.worldPos.y,
+    z: c.worldPos.z + progress * 1.25,
+  });
+  if (!p.visible) return;
+
+  const isCompact = viewportWidth < 560;
+  const distScale = Math.max(0.86, Math.min(1.22, p.scale / 13.5));
+  const mainSize = Math.round((isCompact ? 18 : 22) * distScale);
+  const subSize = Math.round((isCompact ? 10 : 11.5) * distScale);
+  const subOffset = Math.round(mainSize * 0.74);
+
+  // Guarantee alerts sit strictly above the top edge of the backboard across all racks & replay heights
+  const oz = hoopPos.z - HOOP_POS.z;
+  const backboardTopProj = projectPoint(basis, {
+    x: hoopPos.x,
+    y: hoopPos.y + (BACKBOARD_Y - HOOP_POS.y),
+    z: BACKBOARD_TOP_Z + oz,
+  });
+  const clearanceAboveBoard = c.subText ? subOffset + 12 : 12;
+  const maxAllowedCy = backboardTopProj.visible
+    ? backboardTopProj.y - clearanceAboveBoard
+    : viewportHeight - 34;
+
+  const cx = Math.max(78, Math.min(viewportWidth - 78, p.x));
+  const cy = Math.max(20, Math.min(maxAllowedCy, p.y));
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+  ctx.shadowBlur = 10 * distScale;
+
+  ctx.font = `800 ${mainSize}px "Barlow Condensed", sans-serif`;
+  ctx.strokeStyle = '#030508';
+  ctx.lineWidth = isCompact ? 6 : 7.5;
+  ctx.strokeText(c.text, cx, cy);
+  ctx.fillStyle = c.color;
+  ctx.fillText(c.text, cx, cy);
+
+  if (c.subText) {
+    const subY = cy + subOffset;
+    ctx.shadowBlur = 6;
+    ctx.font = `700 ${subSize}px "JetBrains Mono", monospace`;
+    ctx.strokeStyle = '#030508';
+    ctx.lineWidth = isCompact ? 4 : 4.5;
+    ctx.strokeText(c.subText, cx, subY);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(c.subText, cx, subY);
+  }
+  ctx.restore();
+}
+
 function drawCallouts(
   ctx: CanvasRenderingContext2D,
   basis: ReturnType<typeof buildCameraBasis>,
   viewportWidth: number,
+  viewportHeight: number,
   callouts: FloatingCallout[]
 ): void {
   if (callouts.length === 0) return;
   const isCompact = viewportWidth < 560;
+  const minTopY = Math.min(108, Math.round(viewportHeight * 0.22));
   ctx.save();
   for (const c of callouts) {
     const progress = 1 - c.life / c.maxLife;
@@ -1811,20 +3009,28 @@ function drawCallouts(
     if (!p.visible) continue;
 
     const cx = Math.max(84, Math.min(viewportWidth - 84, p.x));
-    const cy = Math.max(108, p.y);
+    const cy = Math.max(minTopY, p.y);
 
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
     ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 8;
     ctx.font = `800 ${isCompact ? 20 : 24}px "Barlow Condensed", sans-serif`;
-    ctx.fillStyle = 'rgba(11, 14, 20, 0.78)';
-    ctx.fillText(c.text, cx + 1.5, cy + 1.5);
+    ctx.strokeStyle = '#030508';
+    ctx.lineWidth = isCompact ? 6 : 7.5;
+    ctx.strokeText(c.text, cx, cy);
     ctx.fillStyle = c.color;
     ctx.fillText(c.text, cx, cy);
 
     if (c.subText) {
+      const subY = cy + (isCompact ? 16 : 19);
       ctx.font = `700 ${isCompact ? 11 : 13}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = '#F4EFE6';
-      ctx.fillText(c.subText, cx, cy + (isCompact ? 15 : 18));
+      ctx.strokeStyle = '#030508';
+      ctx.lineWidth = isCompact ? 4.5 : 5;
+      ctx.strokeText(c.subText, cx, subY);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(c.subText, cx, subY);
     }
   }
   ctx.restore();

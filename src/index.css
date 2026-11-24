@@ -1,9 +1,23 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: "Barlow Condensed", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  --bg: #07080c;
+  --surface: #0f1117;
+  --ink: #ffffff;
+  --accent: #00ffaa;
+  --ink-faint: rgba(255, 255, 255, 0.18);
+  --ink-medium: #e2e8f0;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
 }
 
 html,
@@ -11,13 +25,44 @@ body,
 #root {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: #0b0e14;
+  overscroll-behavior: none;
+  background-color: var(--bg);
+  color: var(--ink);
   font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #07080c;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.32);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 170, 0.65);
 }

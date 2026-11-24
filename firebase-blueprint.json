@@ -50,6 +50,22 @@
           "type": "integer",
           "description": "Total completed contests."
         },
+        "totalSwishes": {
+          "type": "integer",
+          "description": "Cumulative clean swishes tracked for historical swish percentage."
+        },
+        "totalSwishTrackedAttempts": {
+          "type": "integer",
+          "description": "Cumulative shot attempts tracked alongside totalSwishes."
+        },
+        "totalBestStreakSum": {
+          "type": "integer",
+          "description": "Cumulative sum of each completed contest's best streak."
+        },
+        "streakTrackedContests": {
+          "type": "integer",
+          "description": "Total contests tracked with best-streak history."
+        },
         "pvpWins": {
           "type": "integer",
           "description": "Total Online PVP wins against opponents."
@@ -61,6 +77,19 @@
         "pvpDraws": {
           "type": "integer",
           "description": "Total Online PVP draws against opponents."
+        },
+        "bestFastBreakMs": {
+          "type": "integer",
+          "description": "Fastest 5-rack Fast-Break time-attack completion in milliseconds (0 if unset)."
+        },
+        "bestFastBreakSplitsMs": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Cumulative 5-rack split timestamps (ms) from the player's fastest Fast-Break run."
+        },
+        "fastBreakContests": {
+          "type": "integer",
+          "description": "Total completed Fast-Break runs."
         },
         "createdAt": {
           "type": "string",
@@ -116,6 +145,564 @@
         }
       },
       "required": ["uid", "username", "createdAt"]
+    },
+    "RivalryRecord": {
+      "title": "RivalryRecord",
+      "description": "Head-to-head Online PVP match history against a specific opponent.",
+      "type": "object",
+      "properties": {
+        "opponentKey": {
+          "type": "string",
+          "description": "Normalized lowercase opponent identifier.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-z0-9_\\-]+$"
+        },
+        "opponentName": {
+          "type": "string",
+          "description": "Display name of the PVP opponent.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "wins": {
+          "type": "integer",
+          "description": "Head-to-head wins against this opponent."
+        },
+        "losses": {
+          "type": "integer",
+          "description": "Head-to-head losses against this opponent."
+        },
+        "draws": {
+          "type": "integer",
+          "description": "Head-to-head draws against this opponent."
+        },
+        "pointsFor": {
+          "type": "integer",
+          "description": "Cumulative points scored against this opponent."
+        },
+        "pointsAgainst": {
+          "type": "integer",
+          "description": "Cumulative points conceded to this opponent."
+        },
+        "lastScoreFor": {
+          "type": "integer",
+          "description": "Score in the most recent match against this opponent."
+        },
+        "lastScoreAgainst": {
+          "type": "integer",
+          "description": "Opponent score in the most recent match."
+        },
+        "lastResult": {
+          "type": "string",
+          "enum": ["WIN", "LOSS", "DRAW"],
+          "description": "Outcome of the most recent match against this opponent."
+        },
+        "currentStreak": {
+          "type": "integer",
+          "description": "Current head-to-head streak (positive for win streak, negative for loss streak)."
+        },
+        "lastPlayedAt": {
+          "type": "integer",
+          "description": "Epoch milliseconds of the last completed match."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": [
+        "opponentKey",
+        "opponentName",
+        "wins",
+        "losses",
+        "draws",
+        "pointsFor",
+        "pointsAgainst",
+        "lastScoreFor",
+        "lastScoreAgainst",
+        "lastResult",
+        "currentStreak",
+        "lastPlayedAt",
+        "updatedAt"
+      ]
+    },
+    "League": {
+      "title": "League",
+      "description": "Online PVP competitive league metadata, roster UIDs, and invite code.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique league identifier matching document ID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the PVP league.",
+          "minLength": 3,
+          "maxLength": 28
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional league tagline or rules summary.",
+          "maxLength": 120
+        },
+        "code": {
+          "type": "string",
+          "description": "6-character uppercase join code.",
+          "minLength": 6,
+          "maxLength": 6,
+          "pattern": "^[A-Z0-9]{6}$"
+        },
+        "isPublic": {
+          "type": "boolean",
+          "description": "Whether the league is visible in the public directory."
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the league creator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerName": {
+          "type": "string",
+          "description": "Username of the league creator.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "memberUids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of UIDs currently enrolled in the league."
+        },
+        "memberCount": {
+          "type": "integer",
+          "description": "Current number of enrolled members."
+        },
+        "maxMembers": {
+          "type": "integer",
+          "description": "Maximum allowed members in this league (up to 25)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "code",
+        "isPublic",
+        "ownerUid",
+        "ownerName",
+        "memberUids",
+        "memberCount",
+        "maxMembers",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "LeagueMember": {
+      "title": "LeagueMember",
+      "description": "Per-member league standings and PVP shootout totals.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Member Firebase Auth UID matching document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Display username inside the league.",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["OWNER", "MEMBER"],
+          "description": "Member role within the league."
+        },
+        "wins": {
+          "type": "integer",
+          "description": "League PVP wins."
+        },
+        "losses": {
+          "type": "integer",
+          "description": "League PVP losses."
+        },
+        "draws": {
+          "type": "integer",
+          "description": "League PVP draws."
+        },
+        "matchesPlayed": {
+          "type": "integer",
+          "description": "Total league PVP matches played."
+        },
+        "pointsFor": {
+          "type": "integer",
+          "description": "Cumulative points scored in league PVP matches."
+        },
+        "pointsAgainst": {
+          "type": "integer",
+          "description": "Cumulative points conceded in league PVP matches."
+        },
+        "leaguePoints": {
+          "type": "integer",
+          "description": "Standings points (3 per win, 1 per draw)."
+        },
+        "bestScore": {
+          "type": "integer",
+          "description": "Highest single-match score inside this league."
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the member joined."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of last standings update."
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "role",
+        "wins",
+        "losses",
+        "draws",
+        "matchesPlayed",
+        "pointsFor",
+        "pointsAgainst",
+        "leaguePoints",
+        "bestScore",
+        "joinedAt",
+        "updatedAt"
+      ]
+    },
+    "LeagueCodeClaim": {
+      "title": "LeagueCodeClaim",
+      "description": "Unique 6-character invite code lookup pointing to a league ID.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Uppercase 6-character invite code.",
+          "minLength": 6,
+          "maxLength": 6,
+          "pattern": "^[A-Z0-9]{6}$"
+        },
+        "leagueId": {
+          "type": "string",
+          "description": "Target league ID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "leagueName": {
+          "type": "string",
+          "description": "League display name.",
+          "minLength": 3,
+          "maxLength": 28
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "League creator UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of code reservation."
+        }
+      },
+      "required": ["code", "leagueId", "leagueName", "ownerUid", "createdAt"]
+    },
+    "UserLeagueRef": {
+      "title": "UserLeagueRef",
+      "description": "Per-user membership index entry referencing a joined PVP league.",
+      "type": "object",
+      "properties": {
+        "leagueId": {
+          "type": "string",
+          "description": "Joined league ID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "leagueName": {
+          "type": "string",
+          "description": "Cached league display name.",
+          "minLength": 3,
+          "maxLength": 28
+        },
+        "code": {
+          "type": "string",
+          "description": "6-character league invite code.",
+          "minLength": 6,
+          "maxLength": 6,
+          "pattern": "^[A-Z0-9]{6}$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["OWNER", "MEMBER"],
+          "description": "User role in the league."
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user joined."
+        }
+      },
+      "required": ["leagueId", "leagueName", "code", "role", "joinedAt"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Two-player friend request and accepted friendship pairing indexed by sorted UIDs.",
+      "type": "object",
+      "properties": {
+        "pairId": {
+          "type": "string",
+          "description": "Deterministic sorted pair identifier matching document ID (uidA_uidB).",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "memberUids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sorted two-element array of participant Firebase Auth UIDs."
+        },
+        "requesterUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user who initiated the friend request.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "requesterName": {
+          "type": "string",
+          "description": "Username of the requester.",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "recipientUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user receiving the friend request.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "recipientName": {
+          "type": "string",
+          "description": "Username of the recipient.",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "ACCEPTED"],
+          "description": "Friendship lifecycle status."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the request was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the friendship was last updated."
+        }
+      },
+      "required": [
+        "pairId",
+        "memberUids",
+        "requesterUid",
+        "requesterName",
+        "recipientUid",
+        "recipientName",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CourtRankingEntry": {
+      "title": "CourtRankingEntry",
+      "description": "Public per-court leaderboard entry storing a signed-in shooter's best contest score, streak, and swishes on a specific court.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the shooter matching document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "courtId": {
+          "type": "string",
+          "enum": ["wooden_gym", "street_asphalt", "neon_arena", "championship_gold"],
+          "description": "Court identifier matching the parent courtRankings document ID."
+        },
+        "username": {
+          "type": "string",
+          "description": "Shooter display handle shown on the court leaderboard.",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "bestScore": {
+          "type": "integer",
+          "description": "Highest single-contest score achieved by this shooter on this court."
+        },
+        "bestStreak": {
+          "type": "integer",
+          "description": "Longest consecutive make streak achieved on this court."
+        },
+        "totalSwishes": {
+          "type": "integer",
+          "description": "Cumulative clean swishes recorded on this court."
+        },
+        "contestsPlayed": {
+          "type": "integer",
+          "description": "Total completed contests on this court."
+        },
+        "lastScore": {
+          "type": "integer",
+          "description": "Most recent completed contest score on this court."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when this court ranking entry was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest contest submission on this court."
+        }
+      },
+      "required": [
+        "uid",
+        "courtId",
+        "username",
+        "bestScore",
+        "bestStreak",
+        "totalSwishes",
+        "contestsPlayed",
+        "lastScore",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PvpGlobalRankingEntry": {
+      "title": "PvpGlobalRankingEntry",
+      "description": "Global Online 1v1 PVP leaderboard entry storing a signed-in shooter's best PVP score across all courts and PVP match stats.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the shooter matching document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Shooter display handle shown on the global PVP leaderboard.",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "bestScore": {
+          "type": "integer",
+          "description": "Highest single-match PVP score achieved across all courts."
+        },
+        "bestCourtId": {
+          "type": "string",
+          "enum": ["wooden_gym", "street_asphalt", "neon_arena", "championship_gold"],
+          "description": "Court on which the player's highest PVP score was recorded."
+        },
+        "bestStreak": {
+          "type": "integer",
+          "description": "Longest consecutive make streak achieved in PVP mode."
+        },
+        "totalSwishes": {
+          "type": "integer",
+          "description": "Cumulative clean swishes recorded in PVP matches."
+        },
+        "pvpMatchesPlayed": {
+          "type": "integer",
+          "description": "Total completed Online 1v1 PVP matches tracked on the leaderboard."
+        },
+        "pvpWins": {
+          "type": "integer",
+          "description": "Total Online 1v1 PVP wins."
+        },
+        "pvpLosses": {
+          "type": "integer",
+          "description": "Total Online 1v1 PVP losses."
+        },
+        "pvpDraws": {
+          "type": "integer",
+          "description": "Total Online 1v1 PVP draws."
+        },
+        "lastScore": {
+          "type": "integer",
+          "description": "Most recent completed Online 1v1 PVP score."
+        },
+        "lastCourtId": {
+          "type": "string",
+          "enum": ["wooden_gym", "street_asphalt", "neon_arena", "championship_gold"],
+          "description": "Court used in the most recent Online 1v1 PVP match."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when this global PVP ranking entry was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest PVP match submission."
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "bestScore",
+        "bestCourtId",
+        "bestStreak",
+        "totalSwishes",
+        "pvpMatchesPlayed",
+        "pvpWins",
+        "pvpLosses",
+        "pvpDraws",
+        "lastScore",
+        "lastCourtId",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -123,9 +710,41 @@
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Private owner-only user profile and career shootout stats."
     },
+    "/users/{userId}/rivalries/{opponentKey}": {
+      "schema": { "$ref": "#/entities/RivalryRecord" },
+      "description": "Private owner-only head-to-head PVP rivalry records."
+    },
+    "/users/{userId}/leagues/{leagueId}": {
+      "schema": { "$ref": "#/entities/UserLeagueRef" },
+      "description": "Private owner-only index of leagues the user belongs to."
+    },
     "/usernames/{usernameLower}": {
       "schema": { "$ref": "#/entities/UsernameClaim" },
       "description": "Unique username reservation registry for Online PVP."
+    },
+    "/leagues/{leagueId}": {
+      "schema": { "$ref": "#/entities/League" },
+      "description": "Online PVP competitive leagues (public directory or member access)."
+    },
+    "/leagues/{leagueId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/LeagueMember" },
+      "description": "Standings and match statistics for each member inside a league."
+    },
+    "/leagueCodes/{code}": {
+      "schema": { "$ref": "#/entities/LeagueCodeClaim" },
+      "description": "Unique 6-character invite code lookup for joining leagues."
+    },
+    "/friendships/{pairId}": {
+      "schema": { "$ref": "#/entities/Friendship" },
+      "description": "Two-player friend requests and accepted friendships."
+    },
+    "/courtRankings/{courtId}/entries/{userId}": {
+      "schema": { "$ref": "#/entities/CourtRankingEntry" },
+      "description": "Per-court shooter leaderboard entries ranked by best contest score on that specific court."
+    },
+    "/pvpGlobalRankings/{userId}": {
+      "schema": { "$ref": "#/entities/PvpGlobalRankingEntry" },
+      "description": "Worldwide Top 100 leaderboard tracking Online 1v1 PVP performances across all courts."
     }
   }
 }

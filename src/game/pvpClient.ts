@@ -1,4 +1,10 @@
-import { PvpLobbyStats, PvpMatchSnapshot, Vec3 } from './types';
+import {
+  FriendPresence,
+  MatchInvitePayload,
+  PvpLobbyStats,
+  PvpMatchSnapshot,
+  Vec3,
+} from './types';
 
 export interface OpponentShotEvent {
   playerId: string;
@@ -13,10 +19,15 @@ export interface PvpClientHandlers {
   onConnected?: (connected: boolean) => void;
   onWelcome?: (playerId: string, name: string) => void;
   onLobbyStats?: (stats: PvpLobbyStats) => void;
-  onQueueStatus?: (inQueue: boolean) => void;
+  onQueueStatus?: (inQueue: boolean, leagueId?: string | null, leagueName?: string | null) => void;
   onMatchState?: (match: PvpMatchSnapshot) => void;
   onOpponentShot?: (shot: OpponentShotEvent) => void;
   onOpponentLeft?: () => void;
+  onFriendStatuses?: (statuses: Record<string, FriendPresence>) => void;
+  onMatchInviteSent?: (invite: MatchInvitePayload) => void;
+  onMatchInviteReceived?: (invite: MatchInvitePayload) => void;
+  onMatchInviteDeclined?: (info: { inviteId: string; byName: string; expired: boolean }) => void;
+  onMatchInviteCancelled?: (info: { inviteId: string; reason: string }) => void;
   onError?: (message: string) => void;
 }
 
@@ -70,7 +81,11 @@ class PvpClient {
           this.handlers.onLobbyStats?.(p as unknown as PvpLobbyStats);
           break;
         case 'pvp:queue_status':
-          this.handlers.onQueueStatus?.(Boolean(p.inQueue));
+          this.handlers.onQueueStatus?.(
+            Boolean(p.inQueue),
+            typeof p.leagueId === 'string' ? p.leagueId : null,
+            typeof p.leagueName === 'string' ? p.leagueName : null
+          );
           break;
         case 'pvp:match_state':
           this.handlers.onMatchState?.(p as unknown as PvpMatchSnapshot);
@@ -80,6 +95,30 @@ class PvpClient {
           break;
         case 'pvp:opponent_left':
           this.handlers.onOpponentLeft?.();
+          break;
+        case 'pvp:friend_statuses':
+          if (p.statuses && typeof p.statuses === 'object') {
+            this.handlers.onFriendStatuses?.(p.statuses as Record<string, FriendPresence>);
+          }
+          break;
+        case 'pvp:match_invite_sent':
+          this.handlers.onMatchInviteSent?.(p as unknown as MatchInvitePayload);
+          break;
+        case 'pvp:match_invite_received':
+          this.handlers.onMatchInviteReceived?.(p as unknown as MatchInvitePayload);
+          break;
+        case 'pvp:match_invite_declined':
+          this.handlers.onMatchInviteDeclined?.({
+            inviteId: String(p.inviteId ?? ''),
+            byName: String(p.byName ?? 'Opponent'),
+            expired: Boolean(p.expired),
+          });
+          break;
+        case 'pvp:match_invite_cancelled':
+          this.handlers.onMatchInviteCancelled?.({
+            inviteId: String(p.inviteId ?? ''),
+            reason: String(p.reason ?? 'CANCELLED'),
+          });
           break;
         case 'pvp:error':
           this.handlers.onError?.(String(p.message ?? 'Connection error'));
@@ -123,21 +162,60 @@ class PvpClient {
   public setProfile(
     name: string,
     moneyRack: number,
-    record?: { wins: number; losses: number; draws: number }
+    record?: { wins: number; losses: number; draws: number },
+    uid?: string | null,
+    stats?: { bestScore: number; bestStreak: number; accuracyPct: number }
   ): void {
-    this.send('lobby:set_profile', { name, moneyRack, record });
+    const body: Record<string, unknown> = { name, moneyRack, record };
+    if (uid !== undefined) body.uid = uid;
+    if (stats) body.stats = stats;
+    this.send('lobby:set_profile', body);
   }
 
-  public joinQueue(): void {
-    this.send('pvp:queue_join');
+  public watchFriends(uids: string[]): void {
+    this.send('friends:watch', { uids });
+  }
+
+  public sendMatchInvite(params: {
+    targetUid: string;
+    targetName: string;
+    isRematch?: boolean;
+    leagueId?: string | null;
+    leagueName?: string | null;
+  }): void {
+    this.send('pvp:match_invite_send', {
+      targetUid: params.targetUid,
+      targetName: params.targetName,
+      isRematch: Boolean(params.isRematch),
+      leagueId: params.leagueId ?? null,
+      leagueName: params.leagueName ?? null,
+    });
+  }
+
+  public respondMatchInvite(inviteId: string, accept: boolean): void {
+    this.send('pvp:match_invite_respond', { inviteId, accept });
+  }
+
+  public cancelMatchInvite(inviteId: string): void {
+    this.send('pvp:match_invite_cancel', { inviteId });
+  }
+
+  public joinQueue(league?: { id: string; name: string } | null): void {
+    this.send(
+      'pvp:queue_join',
+      league ? { leagueId: league.id, leagueName: league.name } : {}
+    );
   }
 
   public leaveQueue(): void {
     this.send('pvp:queue_leave');
   }
 
-  public createRoom(): void {
-    this.send('pvp:room_create');
+  public createRoom(league?: { id: string; name: string } | null): void {
+    this.send(
+      'pvp:room_create',
+      league ? { leagueId: league.id, leagueName: league.name } : {}
+    );
   }
 
   public joinRoom(code: string): void {

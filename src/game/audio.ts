@@ -1,4 +1,5 @@
 import { RACK_CONFIGS } from './constants';
+import { CourtThemeId } from './types';
 
 interface CrowdSectionAnchor {
   id: 'baseline' | 'left' | 'right';
@@ -53,6 +54,7 @@ class SoundEngine {
   private crowdTargetGain = 0.018;
   private crowdExcitement = 0;
   private currentRackIndex = 2;
+  private courtTheme: CourtThemeId = 'wooden_gym';
 
   public isMuted(): boolean {
     return this.muted;
@@ -61,6 +63,15 @@ class SoundEngine {
   public setMuted(mute: boolean): void {
     this.muted = mute;
     this.updateCrowdStateGraph();
+  }
+
+  public setCourtTheme(theme: CourtThemeId): void {
+    this.courtTheme = theme;
+    this.updateCrowdStateGraph();
+  }
+
+  public getCourtTheme(): CourtThemeId {
+    return this.courtTheme;
   }
 
   private getRackCrowdAcoustics(rackIndex: number): RackCrowdAcoustics {
@@ -166,6 +177,8 @@ class SoundEngine {
     }
   }
 
+  private iosAudioPrimed = false;
+
   public unlock(): void {
     if (typeof window === 'undefined') return;
     if (!this.ctx) {
@@ -173,14 +186,38 @@ class SoundEngine {
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
-        this.ctx = new AudioCtx();
+        this.ctx = new AudioCtx({ latencyHint: 'interactive' });
       }
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
-    }
     if (this.ctx) {
+      // iOS Safari transitions AudioContext to 'suspended' or 'interrupted'
+      if (this.ctx.state !== 'running') {
+        this.ctx.resume().catch(() => {});
+      }
+      if (!this.iosAudioPrimed) {
+        try {
+          const silentBuf = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+          const src = this.ctx.createBufferSource();
+          src.buffer = silentBuf;
+          src.connect(this.ctx.destination);
+          src.start(0);
+          this.iosAudioPrimed = true;
+        } catch {
+          // Ignore if context is not yet ready
+        }
+      }
       this.ensureCrowdAmbience(this.ctx);
+    }
+  }
+
+  public handleVisibilityChange(hidden: boolean): void {
+    if (!this.ctx) return;
+    if (hidden) {
+      if (this.ctx.state === 'running') {
+        this.ctx.suspend().catch(() => {});
+      }
+    } else if (!this.muted && this.ctx.state !== 'running') {
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -378,6 +415,240 @@ class SoundEngine {
       bowlSrc.connect(bowlFilter).connect(bowlGain);
       this.connectWithPan(ctx, bowlGain, acoustics.cheerPan * 0.35);
       bowlSrc.start(now, Math.random() * 1.5, cheerDuration + 0.3);
+    }
+
+    // 3. Court-specific crowd chant signature (organ claps, street park hype, cyber chant, or MVP cadence)
+    if (streak >= 2 || isMoney || Math.random() < 0.45) {
+      this.playCourtChantLayer(
+        ctx,
+        this.courtTheme,
+        now + 0.06,
+        strength,
+        acoustics.cheerPan,
+        positionalGainMult,
+        false
+      );
+    }
+  }
+
+  public playCourtPreviewChant(theme: CourtThemeId): void {
+    if (this.muted) return;
+    this.unlock();
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    this.playCourtChantLayer(ctx, theme, now, 0.88, 0, 1.05, true);
+  }
+
+  private playCourtChantLayer(
+    ctx: AudioContext,
+    theme: CourtThemeId,
+    now: number,
+    strength: number,
+    pan: number,
+    gainMult: number,
+    isPreview: boolean
+  ): void {
+    const levelBoost = isPreview ? 1.18 : 0.75 + strength * 0.45;
+
+    if (theme === 'street_asphalt') {
+      // Outdoor blacktop crowd "OHHH / AYYY!" swell + bucket-drum kick + street horn stab
+      const chantSrc = ctx.createBufferSource();
+      chantSrc.buffer = this.getCrowdLoopBuffer(ctx);
+      const formant = ctx.createBiquadFilter();
+      formant.type = 'bandpass';
+      formant.Q.value = 2.1;
+      formant.frequency.setValueAtTime(420, now);
+      formant.frequency.exponentialRampToValueAtTime(980, now + 0.16);
+      formant.frequency.exponentialRampToValueAtTime(560, now + 0.72);
+
+      const chantGain = ctx.createGain();
+      chantGain.gain.setValueAtTime(0.001, now);
+      chantGain.gain.linearRampToValueAtTime(0.068 * gainMult * levelBoost, now + 0.09);
+      chantGain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+      chantSrc.connect(formant).connect(chantGain);
+      this.connectWithPan(ctx, chantGain, pan * 0.6);
+      chantSrc.start(now, Math.random() * 1.4, 0.9);
+
+      // Bucket-drum low thump + street airhorn double-stab
+      [0, 0.16].forEach((offset, idx) => {
+        const t0 = now + offset;
+        const kick = ctx.createOscillator();
+        const kGain = ctx.createGain();
+        kick.type = 'sine';
+        kick.frequency.setValueAtTime(idx === 0 ? 140 : 120, t0);
+        kick.frequency.exponentialRampToValueAtTime(46, t0 + 0.12);
+        kGain.gain.setValueAtTime(0.055 * levelBoost, t0);
+        kGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14);
+        kick.connect(kGain).connect(ctx.destination);
+        kick.start(t0);
+        kick.stop(t0 + 0.15);
+      });
+
+      if (isPreview || strength >= 0.55) {
+        [0.06, 0.24].forEach((offset, idx) => {
+          const t0 = now + offset;
+          const dur = idx === 0 ? 0.12 : 0.28;
+          [466.16, 471.5].forEach((hz) => {
+            const osc = ctx.createOscillator();
+            const lpf = ctx.createBiquadFilter();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(hz, t0);
+            lpf.type = 'lowpass';
+            lpf.frequency.setValueAtTime(1450, t0);
+            gain.gain.setValueAtTime(0.001, t0);
+            gain.gain.linearRampToValueAtTime(0.018 * levelBoost, t0 + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+            osc.connect(lpf).connect(gain);
+            this.connectWithPan(ctx, gain, pan * 0.35);
+            osc.start(t0);
+            osc.stop(t0 + dur + 0.02);
+          });
+        });
+      }
+      return;
+    }
+
+    if (theme === 'neon_arena') {
+      // Twin rhythmic synth-dome "LET'S GO!" crowd chant pulses + sub-bass drop + cyber arpeggio
+      [0, 0.26].forEach((offset, idx) => {
+        const t0 = now + offset;
+        const src = ctx.createBufferSource();
+        src.buffer = this.getCrowdLoopBuffer(ctx);
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.Q.value = 1.65;
+        bp.frequency.setValueAtTime(idx === 0 ? 680 : 860, t0);
+        bp.frequency.exponentialRampToValueAtTime(idx === 0 ? 1140 : 1420, t0 + 0.14);
+
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.001, t0);
+        g.gain.linearRampToValueAtTime(0.062 * gainMult * levelBoost, t0 + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.24);
+        src.connect(bp).connect(g);
+        this.connectWithPan(ctx, g, pan * 0.45);
+        src.start(t0, Math.random() * 1.4, 0.28);
+      });
+
+      const sub = ctx.createOscillator();
+      const subG = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(98, now);
+      sub.frequency.exponentialRampToValueAtTime(44, now + 0.38);
+      subG.gain.setValueAtTime(0.065 * levelBoost, now);
+      subG.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      sub.connect(subG).connect(ctx.destination);
+      sub.start(now);
+      sub.stop(now + 0.42);
+
+      const arpNotes = [523.25, 659.25, 783.99, 1046.5];
+      arpNotes.forEach((hz, idx) => {
+        const t0 = now + idx * 0.065;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(hz, t0);
+        g.gain.setValueAtTime(0.001, t0);
+        g.gain.linearRampToValueAtTime(0.022 * levelBoost, t0 + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.24);
+        osc.connect(g);
+        this.connectWithPan(ctx, g, (idx - 1.5) * 0.22);
+        osc.start(t0);
+        osc.stop(t0 + 0.26);
+      });
+      return;
+    }
+
+    if (theme === 'championship_gold') {
+      // Three-beat "M - V - P!" stadium chant cadence + regal brass chord
+      [0, 0.23, 0.46].forEach((offset, idx) => {
+        const t0 = now + offset;
+        const src = ctx.createBufferSource();
+        src.buffer = this.getCrowdLoopBuffer(ctx);
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.Q.value = 1.35;
+        bp.frequency.setValueAtTime(520 + idx * 110, t0);
+        bp.frequency.exponentialRampToValueAtTime(760 + idx * 140, t0 + 0.11);
+
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.001, t0);
+        g.gain.linearRampToValueAtTime(0.064 * gainMult * levelBoost, t0 + 0.035);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
+        src.connect(bp).connect(g);
+        this.connectWithPan(ctx, g, pan * 0.4);
+        src.start(t0, Math.random() * 1.3, 0.22);
+
+        const stomp = ctx.createOscillator();
+        const sg = ctx.createGain();
+        stomp.type = 'sine';
+        stomp.frequency.setValueAtTime(115, t0);
+        stomp.frequency.exponentialRampToValueAtTime(48, t0 + 0.11);
+        sg.gain.setValueAtTime(0.048 * levelBoost, t0);
+        sg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
+        stomp.connect(sg).connect(ctx.destination);
+        stomp.start(t0);
+        stomp.stop(t0 + 0.13);
+      });
+
+      if (isPreview || strength >= 0.45) {
+        [261.63, 329.63, 392.0, 523.25].forEach((hz, idx) => {
+          const t0 = now + 0.46 + idx * 0.025;
+          const osc = ctx.createOscillator();
+          const lpf = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(hz, t0);
+          lpf.type = 'lowpass';
+          lpf.frequency.setValueAtTime(1600, t0);
+          g.gain.setValueAtTime(0.001, t0);
+          g.gain.linearRampToValueAtTime(0.015 * levelBoost, t0 + 0.04);
+          g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.48);
+          osc.connect(lpf).connect(g).connect(ctx.destination);
+          osc.start(t0);
+          osc.stop(t0 + 0.5);
+        });
+      }
+      return;
+    }
+
+    // Default: 'wooden_gym' — rhythmic stadium clap cadence + warm classic organ charge
+    [0, 0.16, 0.32, 0.43, 0.54].forEach((offset) => {
+      const t0 = now + offset;
+      const clapSrc = ctx.createBufferSource();
+      clapSrc.buffer = this.getNoiseBuffer(ctx);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(1650 + Math.random() * 240, t0);
+      bp.Q.value = 1.5;
+
+      const cg = ctx.createGain();
+      cg.gain.setValueAtTime(0.001, t0);
+      cg.gain.linearRampToValueAtTime(0.036 * gainMult * levelBoost, t0 + 0.012);
+      cg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.085);
+      clapSrc.connect(bp).connect(cg);
+      this.connectWithPan(ctx, cg, pan * 0.65);
+      clapSrc.start(t0, Math.random() * 0.2, 0.095);
+    });
+
+    if (isPreview || strength >= 0.42) {
+      [349.23, 440.0, 523.25].forEach((hz, idx) => {
+        const t0 = now + idx * 0.055;
+        const osc = ctx.createOscillator();
+        const lpf = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(hz, t0);
+        lpf.type = 'lowpass';
+        lpf.frequency.setValueAtTime(1650, t0);
+        g.gain.setValueAtTime(0.001, t0);
+        g.gain.linearRampToValueAtTime(0.022 * levelBoost, t0 + 0.025);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.36);
+        osc.connect(lpf).connect(g).connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.38);
+      });
     }
   }
 
@@ -581,6 +852,27 @@ class SoundEngine {
       osc2.connect(gain2).connect(ctx.destination);
       osc2.start(now + 0.05);
       osc2.stop(now + 0.35);
+    }
+
+    // Street Asphalt chain-net metallic shimmer on swishes
+    if (this.courtTheme === 'street_asphalt') {
+      [0.01, 0.055, 0.1].forEach((offset) => {
+        const t0 = now + offset;
+        const chainSrc = ctx.createBufferSource();
+        chainSrc.buffer = this.getNoiseBuffer(ctx);
+        const chainFilter = ctx.createBiquadFilter();
+        chainFilter.type = 'bandpass';
+        chainFilter.frequency.setValueAtTime(3900 + Math.random() * 700, t0);
+        chainFilter.Q.value = 3.2;
+
+        const chainGain = ctx.createGain();
+        chainGain.gain.setValueAtTime(0.001, t0);
+        chainGain.gain.linearRampToValueAtTime(isPerfect ? 0.095 : 0.065, t0 + 0.01);
+        chainGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.075);
+
+        chainSrc.connect(chainFilter).connect(chainGain).connect(ctx.destination);
+        chainSrc.start(t0, Math.random() * 0.2, 0.085);
+      });
     }
 
     // Positional arena crowd cheer scaled by rack position & streak magnitude

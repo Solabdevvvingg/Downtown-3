@@ -109,6 +109,10 @@ export function computeShotLaunch(
     }
   }
 
+  // Scale flight time gracefully for long-range half-court shots (~40+ ft) while keeping 3pt physics identical
+  const timeDistMult = dirToHoopLen > 27 ? Math.pow(dirToHoopLen / 24.0, 0.48) : 1;
+  flightTime *= timeDistMult;
+
   const vx = (targetX - releasePos.x) / flightTime;
   const vy = (targetY - releasePos.y) / flightTime;
   const vz = (targetZ - releasePos.z - 0.5 * GRAVITY_FT_S2 * flightTime * flightTime) / flightTime;
@@ -125,7 +129,17 @@ export interface StepBallCallbacks {
   onScore: (ball: ActiveBall) => void;
   onMiss: (ball: ActiveBall) => void;
   onRimHit: (ball: ActiveBall, impactSpeed: number) => void;
+  onRimHangStart?: (ball: ActiveBall) => void;
   onBackboardHit: (ball: ActiveBall) => void;
+}
+
+const RIM_HANG_FORCE_THRESHOLD = 14.2;
+
+function getRimHangProbability(difficultyLevel: number): number {
+  if (difficultyLevel >= 4) return 0.42;
+  if (difficultyLevel === 3) return 0.32;
+  if (difficultyLevel === 2) return 0.22;
+  return 0.1;
 }
 
 export function stepBallPhysics(
@@ -135,13 +149,84 @@ export function stepBallPhysics(
   windAccel?: { x: number; y: number },
   hoopPos: Vec3 = HOOP_POS
 ): void {
-  const substeps = 4;
-  const subDt = dt / substeps;
   const backboardY = hoopPos.y + (BACKBOARD_Y - HOOP_POS.y);
   const backboardBottomZ = hoopPos.z + (BACKBOARD_BOTTOM_Z - HOOP_POS.z);
   const backboardTopZ = hoopPos.z + (BACKBOARD_TOP_Z - HOOP_POS.z);
 
   ball.age += dt;
+
+  // Rare rim-hang sequence: ball dances/bounces along the rim circumference before settling or falling out
+  if (ball.rimHang) {
+    const rh = ball.rimHang;
+    rh.elapsed += dt;
+    const progress = Math.min(1, rh.elapsed / rh.duration);
+
+    const currentAngVel = rh.angularVel * (1 - progress * 0.5);
+    rh.angle += currentAngVel * dt;
+    ball.spinAngle += currentAngVel * 1.65 * dt;
+
+    const radialBias = rh.willScore ? -0.15 * progress : 0.17 * progress;
+    const orbitRadius = RIM_RADIUS * 0.92 + radialBias;
+    const bounceWave = Math.abs(Math.sin(progress * Math.PI * rh.bounces));
+    const damping = 1 - progress * 0.6;
+    const hopZ = bounceWave * damping * 0.52;
+
+    ball.pos.x = hoopPos.x + Math.cos(rh.angle) * orbitRadius;
+    ball.pos.y = hoopPos.y + Math.sin(rh.angle) * orbitRadius;
+    ball.pos.z = hoopPos.z + BALL_RADIUS * 0.88 + hopZ;
+    ball.vel.x = -Math.sin(rh.angle) * currentAngVel * orbitRadius;
+    ball.vel.y = Math.cos(rh.angle) * currentAngVel * orbitRadius;
+    ball.vel.z = Math.cos(progress * Math.PI * rh.bounces) * damping * 3.0;
+
+    const bounceStep = Math.floor(progress * rh.bounces);
+    if (bounceStep > rh.lastBounceStep && progress < 0.96) {
+      rh.lastBounceStep = bounceStep;
+      ball.hitRimCount += 1;
+      cb.onRimHit(ball, 5.5 + (1 - progress) * 4.5);
+    }
+
+    if (rh.elapsed >= rh.duration) {
+      const finalAngle = rh.angle;
+      const shouldScore = rh.willScore;
+      ball.rimHang = undefined;
+      ball.rimHangDone = true;
+      // Bypass torus re-collision on exit so resolution is decisive
+      ball.skipRimCollision = true;
+
+      if (shouldScore) {
+        const dropR = RIM_RADIUS * 0.34;
+        ball.pos.x = hoopPos.x + Math.cos(finalAngle) * dropR;
+        ball.pos.y = hoopPos.y + Math.sin(finalAngle) * dropR;
+        ball.pos.z = hoopPos.z + 0.16;
+        ball.vel.x = -Math.cos(finalAngle) * 0.7;
+        ball.vel.y = -Math.sin(finalAngle) * 0.7;
+        ball.vel.z = -7.2;
+      } else {
+        const outR = RIM_RADIUS + BALL_RADIUS * 0.68;
+        const safeKickY = Math.sin(finalAngle) < -0.3 ? Math.abs(Math.sin(finalAngle)) * 0.6 : Math.sin(finalAngle);
+        const kickLen = Math.hypot(Math.cos(finalAngle), safeKickY) || 1;
+        const kx = Math.cos(finalAngle) / kickLen;
+        const ky = safeKickY / kickLen;
+        ball.pos.x = hoopPos.x + Math.cos(finalAngle) * outR;
+        ball.pos.y = Math.max(backboardY + BALL_RADIUS + 0.06, hoopPos.y + Math.sin(finalAngle) * outR);
+        ball.pos.z = hoopPos.z + BALL_RADIUS * 0.92;
+        ball.vel.x = kx * 4.5;
+        ball.vel.y = ky * 4.5;
+        ball.vel.z = 2.3;
+      }
+    }
+
+    ball.trail.push({ ...ball.pos });
+    const maxTrailLen = (ball.streakAtRelease ?? 0) >= 3 ? 28 : 14;
+    if (ball.trail.length > maxTrailLen) {
+      ball.trail.shift();
+    }
+    return;
+  }
+
+  const substeps = 4;
+  const subDt = dt / substeps;
+
   ball.spinAngle += ball.spinRate * dt;
 
   for (let s = 0; s < substeps; s++) {
@@ -204,6 +289,42 @@ export function stepBallPhysics(
 
           const vn = ball.vel.x * nx + ball.vel.y * ny + ball.vel.z * nz;
           if (vn < 0) {
+            const impactForce = Math.abs(vn);
+            const canTriggerRimHang =
+              !ball.isRemote &&
+              !ball.hasScored &&
+              !ball.hasResolved &&
+              !ball.rimHangDone &&
+              ball.hitRimCount === 0 &&
+              ball.intendedOutcome !== 'AIRBALL' &&
+              impactForce >= RIM_HANG_FORCE_THRESHOLD &&
+              Math.random() < getRimHangProbability(ball.difficultyLevelAtRelease ?? 1);
+
+            if (canTriggerRimHang) {
+              const contactAngle = Math.atan2(ball.pos.y - hoopPos.y, ball.pos.x - hoopPos.x);
+              const tangentVel =
+                -ball.vel.x * Math.sin(contactAngle) + ball.vel.y * Math.cos(contactAngle);
+              const dir = Math.abs(tangentVel) > 0.6 ? Math.sign(tangentVel) : Math.random() < 0.5 ? 1 : -1;
+              const baseAngularSpeed = 3.8 + Math.random() * 2.1;
+              const willScore =
+                ball.intendedOutcome === 'MAKE' ? Math.random() < 0.72 : Math.random() < 0.3;
+
+              ball.hadRimHang = true;
+              ball.rimHang = {
+                angle: contactAngle,
+                angularVel: dir * baseAngularSpeed,
+                duration: 1.15 + Math.random() * 0.4,
+                elapsed: 0,
+                willScore,
+                bounces: 3 + Math.floor(Math.random() * 3),
+                lastBounceStep: 0,
+              };
+              ball.hitRimCount += 1;
+              cb.onRimHit(ball, impactForce);
+              cb.onRimHangStart?.(ball);
+              break;
+            }
+
             // If intended MAKE, damp bounce gently into cylinder
             const restitution = ball.intendedOutcome === 'MAKE' ? 0.25 : 0.56;
             ball.vel.x -= (1 + restitution) * vn * nx;
@@ -212,7 +333,7 @@ export function stepBallPhysics(
             ball.vel.x *= 0.85;
             ball.vel.y *= 0.85;
             ball.hitRimCount += 1;
-            cb.onRimHit(ball, Math.abs(vn));
+            cb.onRimHit(ball, impactForce);
           }
         }
       }

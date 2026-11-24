@@ -27,6 +27,14 @@ service cloud.firestore {
       return val is string && val.size() >= 3 && val.size() <= 16 && val.matches('^[a-zA-Z0-9_]+$');
     }
 
+    function isValidLeagueCode(code) {
+      return code is string && code.size() == 6 && code.matches('^[A-Z0-9]{6}$');
+    }
+
+    function isValidCourtId(courtId) {
+      return courtId is string && courtId in ['wooden_gym', 'street_asphalt', 'neon_arena', 'championship_gold'];
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -66,9 +74,16 @@ service cloud.firestore {
         'totalCareerScore',
         'allTimeBestStreak',
         'contestsPlayed',
+        'totalSwishes',
+        'totalSwishTrackedAttempts',
+        'totalBestStreakSum',
+        'streakTrackedContests',
         'pvpWins',
         'pvpLosses',
         'pvpDraws',
+        'bestFastBreakMs',
+        'bestFastBreakSplitsMs',
+        'fastBreakContests',
         'createdAt',
         'updatedAt'
       ]) &&
@@ -84,9 +99,78 @@ service cloud.firestore {
       isValidNonNegInt(data.totalCareerScore, 100000000) &&
       isValidNonNegInt(data.allTimeBestStreak, 500) &&
       isValidNonNegInt(data.contestsPlayed, 1000000) &&
+      (!('totalSwishes' in data) || isValidNonNegInt(data.totalSwishes, 10000000)) &&
+      (!('totalSwishTrackedAttempts' in data) || isValidNonNegInt(data.totalSwishTrackedAttempts, 10000000)) &&
+      (!('totalSwishes' in data) || !('totalSwishTrackedAttempts' in data) || data.totalSwishTrackedAttempts >= data.totalSwishes) &&
+      (!('totalBestStreakSum' in data) || isValidNonNegInt(data.totalBestStreakSum, 50000000)) &&
+      (!('streakTrackedContests' in data) || isValidNonNegInt(data.streakTrackedContests, 1000000)) &&
       isValidNonNegInt(data.pvpWins, 1000000) &&
       isValidNonNegInt(data.pvpLosses, 1000000) &&
       isValidNonNegInt(data.pvpDraws, 1000000) &&
+      (!('bestFastBreakMs' in data) || isValidNonNegInt(data.bestFastBreakMs, 3600000)) &&
+      (!('fastBreakContests' in data) || isValidNonNegInt(data.fastBreakContests, 1000000)) &&
+      (!('bestFastBreakSplitsMs' in data) || (
+        data.bestFastBreakSplitsMs is list &&
+        data.bestFastBreakSplitsMs.size() == 5 &&
+        isValidNonNegInt(data.bestFastBreakSplitsMs[0], 3600000) &&
+        isValidNonNegInt(data.bestFastBreakSplitsMs[1], 3600000) &&
+        isValidNonNegInt(data.bestFastBreakSplitsMs[2], 3600000) &&
+        isValidNonNegInt(data.bestFastBreakSplitsMs[3], 3600000) &&
+        isValidNonNegInt(data.bestFastBreakSplitsMs[4], 3600000)
+      )) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPvpGlobalRankingEntry(data, entryId) {
+      return data.keys().hasAll([
+        'uid',
+        'username',
+        'bestScore',
+        'bestCourtId',
+        'bestStreak',
+        'totalSwishes',
+        'pvpMatchesPlayed',
+        'pvpWins',
+        'pvpLosses',
+        'pvpDraws',
+        'lastScore',
+        'lastCourtId',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'username',
+        'bestScore',
+        'bestCourtId',
+        'bestStreak',
+        'totalSwishes',
+        'pvpMatchesPlayed',
+        'pvpWins',
+        'pvpLosses',
+        'pvpDraws',
+        'lastScore',
+        'lastCourtId',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.uid is string &&
+      data.uid == entryId &&
+      isValidUsername(data.username) &&
+      isValidNonNegInt(data.bestScore, 50000) &&
+      isValidCourtId(data.bestCourtId) &&
+      isValidNonNegInt(data.bestStreak, 500) &&
+      isValidNonNegInt(data.totalSwishes, 10000000) &&
+      isValidNonNegInt(data.pvpMatchesPlayed, 1000000) &&
+      data.pvpMatchesPlayed >= 1 &&
+      isValidNonNegInt(data.pvpWins, 1000000) &&
+      isValidNonNegInt(data.pvpLosses, 1000000) &&
+      isValidNonNegInt(data.pvpDraws, 1000000) &&
+      data.pvpMatchesPlayed == data.pvpWins + data.pvpLosses + data.pvpDraws &&
+      isValidNonNegInt(data.lastScore, 50000) &&
+      data.bestScore >= data.lastScore &&
+      isValidCourtId(data.lastCourtId) &&
       data.createdAt is timestamp &&
       data.updatedAt is timestamp;
     }
@@ -99,6 +183,289 @@ service cloud.firestore {
         isValidUsername(data.username) &&
         data.username.lower() == usernameLower &&
         data.createdAt is timestamp;
+    }
+
+    function isValidRivalryRecord(data, opponentKey) {
+      return data.keys().hasAll([
+        'opponentKey',
+        'opponentName',
+        'wins',
+        'losses',
+        'draws',
+        'pointsFor',
+        'pointsAgainst',
+        'lastScoreFor',
+        'lastScoreAgainst',
+        'lastResult',
+        'currentStreak',
+        'lastPlayedAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'opponentKey',
+        'opponentName',
+        'wins',
+        'losses',
+        'draws',
+        'pointsFor',
+        'pointsAgainst',
+        'lastScoreFor',
+        'lastScoreAgainst',
+        'lastResult',
+        'currentStreak',
+        'lastPlayedAt',
+        'updatedAt'
+      ]) &&
+      data.opponentKey is string &&
+      data.opponentKey == opponentKey &&
+      data.opponentKey.size() >= 1 &&
+      data.opponentKey.size() <= 32 &&
+      data.opponentKey.matches('^[a-z0-9_\\-]+$') &&
+      data.opponentName is string &&
+      data.opponentName.size() >= 1 &&
+      data.opponentName.size() <= 24 &&
+      isValidNonNegInt(data.wins, 1000000) &&
+      isValidNonNegInt(data.losses, 1000000) &&
+      isValidNonNegInt(data.draws, 1000000) &&
+      isValidNonNegInt(data.pointsFor, 100000000) &&
+      isValidNonNegInt(data.pointsAgainst, 100000000) &&
+      isValidNonNegInt(data.lastScoreFor, 50000) &&
+      isValidNonNegInt(data.lastScoreAgainst, 50000) &&
+      data.lastResult is string &&
+      data.lastResult.size() >= 3 &&
+      data.lastResult.size() <= 4 &&
+      data.lastResult in ['WIN', 'LOSS', 'DRAW'] &&
+      data.currentStreak is int &&
+      data.currentStreak >= -100000 &&
+      data.currentStreak <= 100000 &&
+      data.lastPlayedAt is int &&
+      data.lastPlayedAt >= 0 &&
+      data.lastPlayedAt <= 9999999999999 &&
+      data.updatedAt is timestamp &&
+      data.updatedAt == request.time;
+    }
+
+    function isValidUserLeagueRef(data, leagueId) {
+      return data.keys().hasAll(['leagueId', 'leagueName', 'code', 'role', 'joinedAt']) &&
+        data.keys().hasOnly(['leagueId', 'leagueName', 'code', 'role', 'joinedAt']) &&
+        data.leagueId is string &&
+        data.leagueId == leagueId &&
+        isValidId(data.leagueId) &&
+        data.leagueName is string &&
+        data.leagueName.size() >= 3 &&
+        data.leagueName.size() <= 28 &&
+        isValidLeagueCode(data.code) &&
+        data.role is string &&
+        data.role in ['OWNER', 'MEMBER'] &&
+        data.joinedAt is timestamp;
+    }
+
+    function isValidLeague(data, leagueId) {
+      return data.keys().hasAll([
+        'id',
+        'name',
+        'description',
+        'code',
+        'isPublic',
+        'ownerUid',
+        'ownerName',
+        'memberUids',
+        'memberCount',
+        'maxMembers',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id',
+        'name',
+        'description',
+        'code',
+        'isPublic',
+        'ownerUid',
+        'ownerName',
+        'memberUids',
+        'memberCount',
+        'maxMembers',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.id is string &&
+      data.id == leagueId &&
+      isValidId(data.id) &&
+      data.name is string &&
+      data.name.size() >= 3 &&
+      data.name.size() <= 28 &&
+      data.description is string &&
+      data.description.size() <= 120 &&
+      isValidLeagueCode(data.code) &&
+      data.isPublic is bool &&
+      isValidId(data.ownerUid) &&
+      data.ownerName is string &&
+      data.ownerName.size() >= 1 &&
+      data.ownerName.size() <= 24 &&
+      data.maxMembers is int &&
+      data.maxMembers >= 2 &&
+      data.maxMembers <= 25 &&
+      data.memberUids is list &&
+      data.memberUids.size() >= 1 &&
+      data.memberUids.size() <= data.maxMembers &&
+      data.memberUids[0] is string &&
+      data.memberCount is int &&
+      data.memberCount == data.memberUids.size() &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidLeagueMember(data, memberUid) {
+      return data.keys().hasAll([
+        'uid',
+        'username',
+        'role',
+        'wins',
+        'losses',
+        'draws',
+        'matchesPlayed',
+        'pointsFor',
+        'pointsAgainst',
+        'leaguePoints',
+        'bestScore',
+        'joinedAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'username',
+        'role',
+        'wins',
+        'losses',
+        'draws',
+        'matchesPlayed',
+        'pointsFor',
+        'pointsAgainst',
+        'leaguePoints',
+        'bestScore',
+        'joinedAt',
+        'updatedAt'
+      ]) &&
+      data.uid is string &&
+      data.uid == memberUid &&
+      isValidUsername(data.username) &&
+      data.role is string &&
+      data.role in ['OWNER', 'MEMBER'] &&
+      isValidNonNegInt(data.wins, 1000000) &&
+      isValidNonNegInt(data.losses, 1000000) &&
+      isValidNonNegInt(data.draws, 1000000) &&
+      isValidNonNegInt(data.matchesPlayed, 3000000) &&
+      data.matchesPlayed == data.wins + data.losses + data.draws &&
+      isValidNonNegInt(data.pointsFor, 100000000) &&
+      isValidNonNegInt(data.pointsAgainst, 100000000) &&
+      isValidNonNegInt(data.leaguePoints, 3000000) &&
+      data.leaguePoints == data.wins * 3 + data.draws &&
+      isValidNonNegInt(data.bestScore, 50000) &&
+      data.joinedAt is timestamp &&
+      data.updatedAt is timestamp &&
+      data.updatedAt == request.time;
+    }
+
+    function isValidLeagueCodeClaim(data, code) {
+      return data.keys().hasAll(['code', 'leagueId', 'leagueName', 'ownerUid', 'createdAt']) &&
+        data.keys().hasOnly(['code', 'leagueId', 'leagueName', 'ownerUid', 'createdAt']) &&
+        data.code is string &&
+        data.code == code &&
+        isValidLeagueCode(data.code) &&
+        isValidId(data.leagueId) &&
+        data.leagueName is string &&
+        data.leagueName.size() >= 3 &&
+        data.leagueName.size() <= 28 &&
+        data.ownerUid is string &&
+        data.ownerUid == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidFriendship(data, pairId) {
+      return data.keys().hasAll([
+        'pairId',
+        'memberUids',
+        'requesterUid',
+        'requesterName',
+        'recipientUid',
+        'recipientName',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'pairId',
+        'memberUids',
+        'requesterUid',
+        'requesterName',
+        'recipientUid',
+        'recipientName',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.pairId is string &&
+      data.pairId == pairId &&
+      isValidId(data.pairId) &&
+      data.memberUids is list &&
+      data.memberUids.size() == 2 &&
+      data.memberUids[0] is string &&
+      data.memberUids[1] is string &&
+      data.memberUids[0] < data.memberUids[1] &&
+      data.pairId == data.memberUids[0] + '_' + data.memberUids[1] &&
+      isValidId(data.requesterUid) &&
+      isValidId(data.recipientUid) &&
+      data.requesterUid != data.recipientUid &&
+      data.requesterUid in data.memberUids &&
+      data.recipientUid in data.memberUids &&
+      isValidUsername(data.requesterName) &&
+      isValidUsername(data.recipientName) &&
+      data.status is string &&
+      data.status in ['PENDING', 'ACCEPTED'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidCourtRankingEntry(data, courtId, entryId) {
+      return data.keys().hasAll([
+        'uid',
+        'courtId',
+        'username',
+        'bestScore',
+        'bestStreak',
+        'totalSwishes',
+        'contestsPlayed',
+        'lastScore',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid',
+        'courtId',
+        'username',
+        'bestScore',
+        'bestStreak',
+        'totalSwishes',
+        'contestsPlayed',
+        'lastScore',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.uid is string &&
+      data.uid == entryId &&
+      isValidCourtId(data.courtId) &&
+      data.courtId == courtId &&
+      isValidUsername(data.username) &&
+      isValidNonNegInt(data.bestScore, 50000) &&
+      isValidNonNegInt(data.bestStreak, 500) &&
+      isValidNonNegInt(data.totalSwishes, 10000000) &&
+      isValidNonNegInt(data.contestsPlayed, 1000000) &&
+      data.contestsPlayed >= 1 &&
+      isValidNonNegInt(data.lastScore, 50000) &&
+      data.bestScore >= data.lastScore &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
     }
 
     // Owner-only user profile & career stats
@@ -128,9 +495,16 @@ service cloud.firestore {
               'totalCareerScore',
               'allTimeBestStreak',
               'contestsPlayed',
+              'totalSwishes',
+              'totalSwishTrackedAttempts',
+              'totalBestStreakSum',
+              'streakTrackedContests',
               'pvpWins',
               'pvpLosses',
               'pvpDraws',
+              'bestFastBreakMs',
+              'bestFastBreakSplitsMs',
+              'fastBreakContests',
               'updatedAt'
             ]) &&
             incoming().username == existing().username &&
@@ -147,6 +521,59 @@ service cloud.firestore {
         );
 
       allow delete: if false;
+
+      match /rivalries/{opponentKey} {
+        allow get: if isValidId(userId) && isValidId(opponentKey) && isOwner(userId);
+        allow list: if isOwner(userId);
+
+        allow create: if isValidId(userId) &&
+          isValidId(opponentKey) &&
+          isOwner(userId) &&
+          isValidRivalryRecord(incoming(), opponentKey);
+
+        allow update: if isValidId(userId) &&
+          isValidId(opponentKey) &&
+          isOwner(userId) &&
+          isValidRivalryRecord(incoming(), opponentKey) &&
+          incoming().opponentKey == existing().opponentKey &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'opponentName',
+            'wins',
+            'losses',
+            'draws',
+            'pointsFor',
+            'pointsAgainst',
+            'lastScoreFor',
+            'lastScoreAgainst',
+            'lastResult',
+            'currentStreak',
+            'lastPlayedAt',
+            'updatedAt'
+          ]);
+
+        allow delete: if false;
+      }
+
+      match /leagues/{leagueId} {
+        allow get: if isValidId(userId) && isValidId(leagueId) && isOwner(userId);
+        allow list: if isOwner(userId);
+
+        allow create: if isValidId(userId) &&
+          isValidId(leagueId) &&
+          isOwner(userId) &&
+          isValidUserLeagueRef(incoming(), leagueId) &&
+          incoming().joinedAt == request.time;
+
+        allow update: if isValidId(userId) &&
+          isValidId(leagueId) &&
+          isOwner(userId) &&
+          isValidUserLeagueRef(incoming(), leagueId) &&
+          incoming().leagueId == existing().leagueId &&
+          incoming().joinedAt == existing().joinedAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['leagueName', 'code', 'role']);
+
+        allow delete: if isValidId(userId) && isValidId(leagueId) && isOwner(userId);
+      }
     }
 
     // Unique username reservations (single-doc get only; no scraping via list)
@@ -164,6 +591,283 @@ service cloud.firestore {
       allow delete: if isSignedIn() &&
         isValidUsernameLower(usernameLower) &&
         existing().uid == request.auth.uid;
+    }
+
+    // Competitive PVP Leagues
+    match /leagues/{leagueId} {
+      allow get: if isValidId(leagueId) &&
+        isSignedIn() &&
+        (existing().isPublic == true || request.auth.uid in existing().memberUids);
+
+      allow list: if isSignedIn() &&
+        (resource.data.isPublic == true || request.auth.uid in resource.data.memberUids);
+
+      allow create: if isValidId(leagueId) &&
+        isSignedIn() &&
+        isValidLeague(incoming(), leagueId) &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().memberUids.size() == 1 &&
+        incoming().memberUids[0] == request.auth.uid &&
+        incoming().memberCount == 1 &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/leagueCodes/$(incoming().code)) &&
+        existsAfter(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid));
+
+      allow update: if isValidId(leagueId) &&
+        isSignedIn() &&
+        isValidLeague(incoming(), leagueId) &&
+        incoming().id == existing().id &&
+        incoming().code == existing().code &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().maxMembers == existing().maxMembers &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            existing().ownerUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name',
+              'description',
+              'isPublic',
+              'ownerName',
+              'updatedAt'
+            ])
+          ) ||
+          (
+            !(request.auth.uid in existing().memberUids) &&
+            existing().memberCount < existing().maxMembers &&
+            request.auth.uid in incoming().memberUids &&
+            incoming().memberUids.hasAll(existing().memberUids) &&
+            incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+            incoming().memberCount == existing().memberCount + 1 &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'memberUids',
+              'memberCount',
+              'updatedAt'
+            ]) &&
+            existsAfter(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid))
+          ) ||
+          (
+            request.auth.uid in existing().memberUids &&
+            request.auth.uid != existing().ownerUid &&
+            !(request.auth.uid in incoming().memberUids) &&
+            existing().memberUids.hasAll(incoming().memberUids) &&
+            incoming().memberUids.size() == existing().memberUids.size() - 1 &&
+            incoming().memberCount == existing().memberCount - 1 &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'memberUids',
+              'memberCount',
+              'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isValidId(leagueId) &&
+        isSignedIn() &&
+        existing().ownerUid == request.auth.uid &&
+        existing().memberCount <= 1;
+
+      match /members/{memberUid} {
+        allow get: if isValidId(leagueId) &&
+          isValidId(memberUid) &&
+          isSignedIn() &&
+          (
+            request.auth.uid == memberUid ||
+            exists(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)) ||
+            get(/databases/$(database)/documents/leagues/$(leagueId)).data.isPublic == true
+          );
+
+        allow list: if false;
+
+        allow create: if isValidId(leagueId) &&
+          isValidId(memberUid) &&
+          isOwner(memberUid) &&
+          isValidLeagueMember(incoming(), memberUid) &&
+          incoming().joinedAt == request.time &&
+          incoming().wins == 0 &&
+          incoming().losses == 0 &&
+          incoming().draws == 0 &&
+          incoming().matchesPlayed == 0 &&
+          incoming().pointsFor == 0 &&
+          incoming().pointsAgainst == 0 &&
+          incoming().leaguePoints == 0 &&
+          incoming().bestScore == 0 &&
+          (
+            incoming().role == 'MEMBER' ||
+            (
+              incoming().role == 'OWNER' &&
+              getAfter(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerUid == request.auth.uid
+            )
+          );
+
+        allow update: if isValidId(leagueId) &&
+          isValidId(memberUid) &&
+          isOwner(memberUid) &&
+          isValidLeagueMember(incoming(), memberUid) &&
+          incoming().uid == existing().uid &&
+          incoming().role == existing().role &&
+          incoming().joinedAt == existing().joinedAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'username',
+            'wins',
+            'losses',
+            'draws',
+            'matchesPlayed',
+            'pointsFor',
+            'pointsAgainst',
+            'leaguePoints',
+            'bestScore',
+            'updatedAt'
+          ]);
+
+        allow delete: if isValidId(leagueId) && isValidId(memberUid) && isOwner(memberUid);
+      }
+    }
+
+    // 6-character League Invite Code Lookup (single-doc get only; no scraping via list)
+    match /leagueCodes/{code} {
+      allow get: if isSignedIn() && isValidLeagueCode(code);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+        isValidLeagueCode(code) &&
+        isValidLeagueCodeClaim(incoming(), code) &&
+        incoming().createdAt == request.time;
+
+      allow update: if false;
+
+      allow delete: if isSignedIn() &&
+        isValidLeagueCode(code) &&
+        existing().ownerUid == request.auth.uid;
+    }
+
+    // Two-player Friend Requests & Accepted Friendships
+    match /friendships/{pairId} {
+      allow get: if isValidId(pairId) &&
+        isSignedIn() &&
+        (
+          resource == null
+            ? (
+                pairId.split('_').size() == 2 &&
+                request.auth.uid in pairId.split('_')
+              )
+            : request.auth.uid in existing().memberUids
+        );
+
+      allow list: if isSignedIn() &&
+        request.auth.uid in resource.data.memberUids;
+
+      allow create: if isValidId(pairId) &&
+        isSignedIn() &&
+        isValidFriendship(incoming(), pairId) &&
+        incoming().requesterUid == request.auth.uid &&
+        incoming().status == 'PENDING' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(pairId) &&
+        isSignedIn() &&
+        isValidFriendship(incoming(), pairId) &&
+        existing().status == 'PENDING' &&
+        incoming().status == 'ACCEPTED' &&
+        request.auth.uid == existing().recipientUid &&
+        incoming().pairId == existing().pairId &&
+        incoming().memberUids == existing().memberUids &&
+        incoming().requesterUid == existing().requesterUid &&
+        incoming().recipientUid == existing().recipientUid &&
+        incoming().requesterName == existing().requesterName &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status',
+          'recipientName',
+          'updatedAt'
+        ]);
+
+      allow delete: if isValidId(pairId) &&
+        isSignedIn() &&
+        request.auth.uid in existing().memberUids;
+    }
+
+    // Per-court top shooters leaderboard entries
+    match /courtRankings/{courtId}/entries/{entryId} {
+      allow get: if isSignedIn() &&
+        isValidCourtId(courtId) &&
+        isValidId(entryId);
+
+      allow list: if isSignedIn() &&
+        isValidCourtId(courtId) &&
+        resource.data.bestScore >= 0;
+
+      allow create: if isSignedIn() &&
+        isValidCourtId(courtId) &&
+        isValidId(entryId) &&
+        isOwner(entryId) &&
+        isValidCourtRankingEntry(incoming(), courtId, entryId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isValidCourtId(courtId) &&
+        isValidId(entryId) &&
+        isOwner(entryId) &&
+        isValidCourtRankingEntry(incoming(), courtId, entryId) &&
+        incoming().uid == existing().uid &&
+        incoming().courtId == existing().courtId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'username',
+          'bestScore',
+          'bestStreak',
+          'totalSwishes',
+          'contestsPlayed',
+          'lastScore',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    // Worldwide Online 1v1 PVP Top 100 leaderboard entries across all courts
+    match /pvpGlobalRankings/{entryId} {
+      allow get: if isSignedIn() &&
+        isValidId(entryId);
+
+      allow list: if isSignedIn() &&
+        resource.data.bestScore >= 0;
+
+      allow create: if isSignedIn() &&
+        isValidId(entryId) &&
+        isOwner(entryId) &&
+        isValidPvpGlobalRankingEntry(incoming(), entryId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isValidId(entryId) &&
+        isOwner(entryId) &&
+        isValidPvpGlobalRankingEntry(incoming(), entryId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'username',
+          'bestScore',
+          'bestCourtId',
+          'bestStreak',
+          'totalSwishes',
+          'pvpMatchesPlayed',
+          'pvpWins',
+          'pvpLosses',
+          'pvpDraws',
+          'lastScore',
+          'lastCourtId',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
     }
   }
 }
