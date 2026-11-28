@@ -106,28 +106,28 @@ const ShotAccuracyChart: React.FC<{ breakdown: TimingBreakdown }> = ({ breakdown
 
   return (
     <div
-      className="bg-[#07090E] border border-white/20 rounded-[2px] p-3.5 mb-4"
+      className="bg-[#05070B] border border-white/30 rounded-[2px] p-3.5 mb-4"
       aria-label="Shot Accuracy Analysis bar chart"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[#FFFFFF]">
           Shot Accuracy Analysis
         </div>
-        <div className="font-mono text-[11px] font-medium text-[#E2E8F0] tabular-nums">
+        <div className="font-mono text-[11px] font-medium text-[#F8FAFC] tabular-nums">
           {total > 0 ? `${onTargetPct}% On-Target · ${total} Shots` : 'No releases recorded'}
         </div>
       </div>
 
       {/* Vertical Bar Chart */}
-      <div className="relative bg-[#0F1117] border border-white/20 rounded-[2px] px-3 pt-4 pb-2.5">
+      <div className="relative bg-[#101520] border border-white/25 rounded-[2px] px-3 pt-4 pb-2.5">
         {/* Horizontal reference lines */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-3 top-4 bottom-12 flex flex-col justify-between"
         >
-          <div className="border-t border-dashed border-white/15" />
-          <div className="border-t border-dashed border-white/15" />
-          <div className="border-t border-white/25" />
+          <div className="border-t border-dashed border-white/20" />
+          <div className="border-t border-dashed border-white/20" />
+          <div className="border-t border-white/30" />
         </div>
 
         <div className="relative grid grid-cols-4 gap-2.5 sm:gap-4 items-end">
@@ -140,7 +140,7 @@ const ShotAccuracyChart: React.FC<{ breakdown: TimingBreakdown }> = ({ breakdown
                 <div className="h-24 w-full flex flex-col justify-end items-center">
                   <span
                     className={`font-mono text-xs font-bold tabular-nums mb-1 ${
-                      item.count > 0 ? item.textColor : 'text-[#CBD5E1]'
+                      item.count > 0 ? item.textColor : 'text-[#F8FAFC]'
                     }`}
                   >
                     {item.count}
@@ -157,7 +157,7 @@ const ShotAccuracyChart: React.FC<{ breakdown: TimingBreakdown }> = ({ breakdown
                   <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#FFFFFF]">
                     {item.label}
                   </div>
-                  <div className="font-mono text-[10px] font-medium text-[#E2E8F0] tabular-nums">
+                  <div className="font-mono text-[10px] font-medium text-[#F8FAFC] tabular-nums">
                     {pct}%
                   </div>
                 </div>
@@ -186,11 +186,11 @@ const StaminaEfficiencyCard: React.FC<{ stats: StaminaEfficiencyStats }> = ({ st
         ? 'text-[#6EE7B7]'
         : stats.efficiencyPct >= 40
           ? 'text-[#FEF08A]'
-          : 'text-[#FECACA]';
+          : 'text-[#FEE2E2]';
 
   return (
     <div
-      className="bg-[#07090E] border border-white/20 rounded-[2px] p-3.5 mb-4"
+      className="bg-[#05070B] border border-white/30 rounded-[2px] p-3.5 mb-4"
       aria-label="Stamina Efficiency Summary"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -200,13 +200,13 @@ const StaminaEfficiencyCard: React.FC<{ stats: StaminaEfficiencyStats }> = ({ st
             Stamina Efficiency
           </span>
           <span
-            className={`font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-[2px] bg-[#161922] border border-white/20 ${textColor}`}
+            className={`font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-[2px] bg-[#141824] border border-white/30 ${textColor}`}
           >
             {stats.rating}
           </span>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="font-mono text-[10px] font-medium text-[#E2E8F0] tabular-nums">
+          <span className="font-mono text-[10px] font-medium text-[#F8FAFC] tabular-nums">
             +{stats.totalSaved}% Saved
           </span>
           <span className={`font-mono text-base font-bold tabular-nums ${textColor}`}>
@@ -215,16 +215,16 @@ const StaminaEfficiencyCard: React.FC<{ stats: StaminaEfficiencyStats }> = ({ st
         </div>
       </div>
 
-      <div className="w-full h-1.5 bg-white/20 rounded-[2px] overflow-hidden mb-3">
+      <div className="w-full h-1.5 bg-white/25 rounded-[2px] overflow-hidden mb-3">
         <div
           className={`h-full rounded-[2px] transition-all duration-300 ${barColor}`}
           style={{ width: `${stats.efficiencyPct}%` }}
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center bg-[#0F1117] border border-white/20 rounded-[2px] p-2">
+      <div className="grid grid-cols-3 gap-2 text-center bg-[#101520] border border-white/25 rounded-[2px] p-2">
         <div>
-          <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+          <div className="font-mono text-[9px] uppercase tracking-wider text-[#F8FAFC]">
             Timing Saved
           </div>
           <div className="font-mono text-xs sm:text-sm font-bold text-[#00ffaa] tabular-nums">
@@ -232,7 +232,7 @@ const StaminaEfficiencyCard: React.FC<{ stats: StaminaEfficiencyStats }> = ({ st
           </div>
         </div>
         <div>
-          <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+          <div className="font-mono text-[9px] uppercase tracking-wider text-[#F8FAFC]">
             Rack Recovery
           </div>
           <div className="font-mono text-xs sm:text-sm font-bold text-[#6EE7B7] tabular-nums">
@@ -240,12 +240,12 @@ const StaminaEfficiencyCard: React.FC<{ stats: StaminaEfficiencyStats }> = ({ st
           </div>
         </div>
         <div>
-          <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+          <div className="font-mono text-[9px] uppercase tracking-wider text-[#F8FAFC]">
             End / Low
           </div>
           <div className="font-mono text-xs sm:text-sm font-bold text-[#FFFFFF] tabular-nums">
             {stats.endStamina}%{' '}
-            <span className="text-[10px] font-medium text-[#E2E8F0]">
+            <span className="text-[10px] font-medium text-[#F8FAFC]">
               ({stats.minStamina}%)
             </span>
           </div>
@@ -273,7 +273,7 @@ const BestShotHighlightCard: React.FC<{
 
   return (
     <div
-      className="bg-[#07090E] border border-[#00ffaa]/70 rounded-[2px] p-3.5 mb-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3"
+      className="bg-[#05070B] border border-[#00ffaa]/75 rounded-[2px] p-3.5 mb-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3"
       aria-label="Best Shot Highlight"
     >
       <div className="min-w-0 flex-1">
@@ -283,7 +283,7 @@ const BestShotHighlightCard: React.FC<{
         <div className="font-sans text-sm sm:text-base font-extrabold uppercase tracking-wide text-[#FFFFFF] mt-0.5 tabular-nums">
           {shotBadge} (+{highlight.pointsAwarded} pts)
         </div>
-        <div className="font-mono text-[11px] font-medium text-[#E2E8F0] truncate tabular-nums">
+        <div className="font-mono text-[11px] font-medium text-[#F8FAFC] truncate tabular-nums">
           {highlight.rackLabel} · {highlight.timingQuality} · {highlight.multiplier}× Mult
         </div>
       </div>
@@ -407,7 +407,7 @@ const CareerComparisonCard: React.FC<{
 
   return (
     <div
-      className="bg-[#07090E] border border-white/20 rounded-[2px] p-3.5 mb-4"
+      className="bg-[#05070B] border border-white/30 rounded-[2px] p-3.5 mb-4"
       aria-label="Career Comparison"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -417,7 +417,7 @@ const CareerComparisonCard: React.FC<{
             Career Comparison
           </span>
         </div>
-        <span className="font-mono text-[10px] font-medium text-[#E2E8F0] tabular-nums">
+        <span className="font-mono text-[10px] font-medium text-[#F8FAFC] tabular-nums">
           {hasScoreBaseline
             ? `vs Avg of ${baseline.contestsPlayed} ${baseline.contestsPlayed === 1 ? 'Contest' : 'Contests'}`
             : '1st Contest · Baseline Set'}
@@ -428,11 +428,11 @@ const CareerComparisonCard: React.FC<{
         {metrics.map((m) => (
           <div
             key={m.label}
-            className="bg-[#0F1117] border border-white/20 rounded-[2px] p-2.5 flex flex-col justify-between"
+            className="bg-[#101520] border border-white/25 rounded-[2px] p-2.5 flex flex-col justify-between"
           >
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="font-mono text-[10px] uppercase tracking-wider font-semibold text-[#E2E8F0]">
+                <span className="font-mono text-[10px] uppercase tracking-wider font-semibold text-[#F8FAFC]">
                   {m.label}
                 </span>
                 <span className={`font-mono text-[11px] font-bold tabular-nums ${m.toneColor}`}>
@@ -444,7 +444,7 @@ const CareerComparisonCard: React.FC<{
                 <span className="font-mono text-lg font-bold text-[#FFFFFF] tabular-nums leading-none">
                   {m.currentDisplay}
                 </span>
-                <span className="font-mono text-[10px] font-medium text-[#CBD5E1] tabular-nums">
+                <span className="font-mono text-[10px] font-medium text-[#F8FAFC] tabular-nums">
                   {m.hasBaseline ? `Avg ${m.avgDisplay}` : m.subDetail ?? 'New baseline'}
                 </span>
               </div>
@@ -463,13 +463,13 @@ const CareerComparisonCard: React.FC<{
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="font-mono text-[9px] font-semibold uppercase text-[#E2E8F0] w-7 shrink-0">
+                <span className="font-mono text-[9px] font-semibold uppercase text-[#F8FAFC] w-7 shrink-0">
                   Avg
                 </span>
                 <div className="flex-1 h-1.5 bg-white/20 rounded-[2px] overflow-hidden">
                   <div
                     className={`h-full rounded-[2px] transition-all duration-300 ${
-                      m.hasBaseline ? 'bg-[#CBD5E1]' : 'bg-white/35'
+                      m.hasBaseline ? 'bg-[#E2E8F0]' : 'bg-white/40'
                     }`}
                     style={{ width: `${m.avgBarPct}%` }}
                   />
@@ -483,9 +483,174 @@ const CareerComparisonCard: React.FC<{
   );
 };
 
+const RivalryUpdatePanel: React.FC<{
+  rivalry: RivalryRecord | null;
+  opponentName: string;
+  myScore: number;
+  oppScore: number;
+  iWon: boolean;
+  isTie: boolean;
+}> = ({ rivalry, opponentName, myScore, oppScore, iWon, isTie }) => {
+  const wins = rivalry?.wins ?? (iWon ? 1 : 0);
+  const losses = rivalry?.losses ?? (!iWon && !isTie ? 1 : 0);
+  const draws = rivalry?.draws ?? (isTie ? 1 : 0);
+  const totalMatches = Math.max(1, wins + losses + draws);
+  const pointsFor = rivalry?.pointsFor ?? myScore;
+  const pointsAgainst = rivalry?.pointsAgainst ?? oppScore;
+
+  const myAvg = pointsFor / totalMatches;
+  const oppAvg = pointsAgainst / totalMatches;
+  const avgDiff = myAvg - oppAvg;
+  const winPct = Math.round((wins / totalMatches) * 100);
+  const avgSum = Math.max(1, myAvg + oppAvg);
+  const mySharePct = (myAvg / avgSum) * 100;
+
+  const seriesStatus =
+    wins > losses
+      ? { label: 'Series Lead', color: 'text-[#00ffaa]' }
+      : losses > wins
+        ? { label: 'Trailing Series', color: 'text-[#FECACA]' }
+        : { label: 'Series Tied', color: 'text-[#FEF08A]' };
+
+  const matchDeltaLabel = iWon ? '+1 Win' : isTie ? '+1 Draw' : '+1 Loss';
+  const matchDeltaColor = iWon
+    ? 'text-[#00ffaa]'
+    : isTie
+      ? 'text-[#FEF08A]'
+      : 'text-[#FECACA]';
+
+  const winBarPct = (wins / totalMatches) * 100;
+  const drawBarPct = (draws / totalMatches) * 100;
+  const lossBarPct = (losses / totalMatches) * 100;
+
+  const streakNote =
+    rivalry && rivalry.currentStreak >= 2
+      ? `${rivalry.currentStreak}W Streak`
+      : rivalry && rivalry.currentStreak <= -2
+        ? `${Math.abs(rivalry.currentStreak)}L Skid`
+        : `${winPct}% Win Rate`;
+
+  return (
+    <div
+      className="bg-[#05070B] border border-[#00ffaa]/70 rounded-[2px] p-3.5 mb-4"
+      aria-label="Rivalry Update"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="min-w-0 flex items-center gap-1.5">
+          <Swords className="w-3.5 h-3.5 text-[#00ffaa] shrink-0" />
+          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[#FFFFFF]">
+            Rivalry Update
+          </span>
+          <span className="font-mono text-[10px] font-medium text-[#F8FAFC] truncate">
+            vs {rivalry?.opponentName ?? opponentName}
+          </span>
+          <RivalBadgeIcon rivalry={rivalry} />
+        </div>
+        <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase shrink-0 tabular-nums">
+          <span className={matchDeltaColor}>{matchDeltaLabel}</span>
+          <span className="text-[#FFFFFF]/70">·</span>
+          <span className={seriesStatus.color}>{seriesStatus.label}</span>
+        </div>
+      </div>
+
+      {/* Total Wins, Losses & Draws Summary */}
+      <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+        <div className="bg-[#101520] border border-white/25 rounded-[2px] p-2">
+          <div className="font-mono text-[9px] uppercase tracking-wider text-[#F8FAFC]">
+            Total Wins
+          </div>
+          <div className="font-mono text-lg sm:text-xl font-extrabold text-[#00ffaa] tabular-nums leading-tight mt-0.5">
+            {wins}
+          </div>
+        </div>
+        <div className="bg-[#101520] border border-white/25 rounded-[2px] p-2">
+          <div className="font-mono text-[9px] uppercase tracking-wider text-[#F8FAFC]">
+            Total Losses
+          </div>
+          <div className="font-mono text-lg sm:text-xl font-extrabold text-[#FEE2E2] tabular-nums leading-tight mt-0.5">
+            {losses}
+          </div>
+        </div>
+        <div className="bg-[#101520] border border-white/25 rounded-[2px] p-2">
+          <div className="font-mono text-[9px] uppercase tracking-wider text-[#F8FAFC]">
+            {draws > 0 ? 'Draws · Matches' : 'Matches Played'}
+          </div>
+          <div className="font-mono text-lg sm:text-xl font-extrabold text-[#FFFFFF] tabular-nums leading-tight mt-0.5">
+            {draws > 0 ? `${draws} · ${totalMatches}` : totalMatches}
+          </div>
+        </div>
+      </div>
+
+      {/* W-L-D Ratio Bar */}
+      <div className="mb-3.5">
+        <div className="flex items-center justify-between font-mono text-[10px] text-[#F8FAFC] mb-1 tabular-nums">
+          <span>
+            Series Record: <strong className="text-[#FFFFFF]">{wins}W–{losses}L{draws > 0 ? `–${draws}D` : ''}</strong>
+          </span>
+          <span className="font-semibold text-[#FFFFFF]">{streakNote}</span>
+        </div>
+        <div className="w-full h-1.5 bg-white/15 rounded-[2px] overflow-hidden flex">
+          {winBarPct > 0 && <div className="h-full bg-[#00ffaa]" style={{ width: `${winBarPct}%` }} />}
+          {drawBarPct > 0 && <div className="h-full bg-[#FBBF24]" style={{ width: `${drawBarPct}%` }} />}
+          {lossBarPct > 0 && <div className="h-full bg-[#EF4444]" style={{ width: `${lossBarPct}%` }} />}
+        </div>
+      </div>
+
+      {/* Scoring Averages Head-to-Head Comparison */}
+      <div className="bg-[#101520] border border-white/25 rounded-[2px] p-3">
+        <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-wider mb-2">
+          <span className="text-[#F8FAFC] font-semibold">Scoring Averages</span>
+          <span
+            className={`font-bold tabular-nums ${
+              avgDiff > 0.05 ? 'text-[#00ffaa]' : avgDiff < -0.05 ? 'text-[#FEE2E2]' : 'text-[#FEF08A]'
+            }`}
+          >
+            Avg Margin {avgDiff >= 0 ? '+' : ''}
+            {avgDiff.toFixed(1)} pts
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-2">
+          <div>
+            <div className="font-mono text-[10px] text-[#00ffaa] uppercase font-semibold truncate">
+              Your Avg
+            </div>
+            <div className="font-mono text-lg sm:text-xl font-extrabold text-[#FFFFFF] tabular-nums leading-tight">
+              {myAvg.toFixed(1)}{' '}
+              <span className="text-[10px] font-medium text-[#F8FAFC] uppercase">pts/g</span>
+            </div>
+            <div className="font-mono text-[10px] text-[#F8FAFC] tabular-nums">
+              {pointsFor} total · today {myScore}
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="font-mono text-[10px] text-[#FFFFFF] uppercase font-semibold truncate">
+              {rivalry?.opponentName ?? opponentName} Avg
+            </div>
+            <div className="font-mono text-lg sm:text-xl font-extrabold text-[#FFFFFF] tabular-nums leading-tight">
+              {oppAvg.toFixed(1)}{' '}
+              <span className="text-[10px] font-medium text-[#F8FAFC] uppercase">pts/g</span>
+            </div>
+            <div className="font-mono text-[10px] text-[#F8FAFC] tabular-nums">
+              {pointsAgainst} total · today {oppScore}
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full h-1.5 bg-white/15 rounded-[2px] overflow-hidden flex">
+          <div className="h-full bg-[#00ffaa]" style={{ width: `${mySharePct}%` }} />
+          <div className="h-full bg-[#CBD5E1]" style={{ width: `${100 - mySharePct}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const RivalriesCard: React.FC<{
   rivalries: RivalryRecord[];
   activeOpponentName?: string;
+  hideActiveRival?: boolean;
   friendships?: FriendshipRecord[];
   friendStatuses?: Record<string, FriendPresence>;
   outgoingInvite?: MatchInvitePayload | null;
@@ -493,6 +658,7 @@ const RivalriesCard: React.FC<{
 }> = ({
   rivalries,
   activeOpponentName,
+  hideActiveRival = false,
   friendships = [],
   friendStatuses = {},
   outgoingInvite = null,
@@ -529,6 +695,10 @@ const RivalriesCard: React.FC<{
 
   const visibleRivals = showAll ? listedRivals : listedRivals.slice(0, 4);
 
+  if (hideActiveRival && listedRivals.length === 0) {
+    return null;
+  }
+
   const renderH2HBar = (r: RivalryRecord) => {
     const total = Math.max(1, r.wins + r.losses + r.draws);
     const winPct = (r.wins / total) * 100;
@@ -551,30 +721,32 @@ const RivalriesCard: React.FC<{
 
   return (
     <div
-      className="bg-[#07090E] border border-white/20 rounded-[2px] p-3.5 mb-4"
+      className="bg-[#05070B] border border-white/30 rounded-[2px] p-3.5 mb-4"
       aria-label="PVP Rivalries"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-1.5">
           <Swords className="w-3.5 h-3.5 text-[#00ffaa]" />
           <span className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[#FFFFFF]">
-            Rivalries
+            {hideActiveRival ? 'Other PVP Rivals' : 'Rivalries'}
           </span>
         </div>
-        <span className="font-mono text-[10px] font-medium text-[#E2E8F0] tabular-nums">
-          {rivalries.length > 0
-            ? `${rivalries.length} ${rivalries.length === 1 ? 'Opponent' : 'Opponents'} Faced`
-            : 'PVP Head-to-Head'}
+        <span className="font-mono text-[10px] font-medium text-[#F8FAFC] tabular-nums">
+          {hideActiveRival
+            ? `${listedRivals.length} ${listedRivals.length === 1 ? 'Other Rival' : 'Other Rivals'}`
+            : rivalries.length > 0
+              ? `${rivalries.length} ${rivalries.length === 1 ? 'Opponent' : 'Opponents'} Faced`
+              : 'PVP Head-to-Head'}
         </span>
       </div>
 
       {rivalries.length === 0 ? (
-        <div className="bg-[#0F1117] border border-white/20 rounded-[2px] px-3 py-2.5 text-xs font-medium text-[#E2E8F0]">
+        <div className="bg-[#101520] border border-white/25 rounded-[2px] px-3 py-2.5 text-xs font-medium text-[#F8FAFC]">
           No PVP rivalries recorded yet. Play Online 1v1 to track head-to-head series against specific opponents.
         </div>
       ) : (
         <div className="space-y-2">
-          {activeRival && (() => {
+          {!hideActiveRival && activeRival && (() => {
             const total = Math.max(1, activeRival.wins + activeRival.losses + activeRival.draws);
             const avgMargin = (activeRival.pointsFor - activeRival.pointsAgainst) / total;
             const status = getSeriesStatus(activeRival);
@@ -585,7 +757,7 @@ const RivalriesCard: React.FC<{
                   ? `${Math.abs(activeRival.currentStreak)}L Skid`
                   : null;
             return (
-              <div className="bg-[#0F1117] border border-[#00ffaa]/65 rounded-[2px] p-3">
+              <div className="bg-[#101520] border border-[#00ffaa]/70 rounded-[2px] p-3">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <div className="min-w-0 flex items-center gap-2">
                     <span className="text-xs font-bold text-[#FFFFFF] truncate">
@@ -597,16 +769,16 @@ const RivalriesCard: React.FC<{
                   </div>
                   <div className="font-mono text-xs font-bold tabular-nums shrink-0">
                     <span className="text-[#00ffaa]">{activeRival.wins}W</span>
-                    <span className="text-[#CBD5E1]">–</span>
-                    <span className="text-[#FECACA]">{activeRival.losses}L</span>
-                    <span className="text-[#CBD5E1]">–</span>
+                    <span className="text-[#F8FAFC]">–</span>
+                    <span className="text-[#FEE2E2]">{activeRival.losses}L</span>
+                    <span className="text-[#F8FAFC]">–</span>
                     <span className="text-[#FEF08A]">{activeRival.draws}D</span>
                   </div>
                 </div>
 
                 {renderH2HBar(activeRival)}
 
-                <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-[11px] font-medium text-[#E2E8F0] tabular-nums">
+                <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-[11px] font-medium text-[#F8FAFC] tabular-nums">
                   <span>
                     Total Pts: {activeRival.pointsFor}–{activeRival.pointsAgainst} (Avg{' '}
                     {avgMargin >= 0 ? '+' : ''}
@@ -622,8 +794,8 @@ const RivalriesCard: React.FC<{
 
           {visibleRivals.length > 0 && (
             <div className="space-y-1.5">
-              {activeRival && (
-                <div className="font-mono text-[10px] uppercase tracking-wider font-bold text-[#E2E8F0] pt-1">
+              {!hideActiveRival && activeRival && (
+                <div className="font-mono text-[10px] uppercase tracking-wider font-bold text-[#F8FAFC] pt-1">
                   Other PVP Rivals
                 </div>
               )}
@@ -634,12 +806,12 @@ const RivalriesCard: React.FC<{
                   r.lastResult === 'WIN'
                     ? 'text-[#00ffaa]'
                     : r.lastResult === 'LOSS'
-                      ? 'text-[#FECACA]'
+                      ? 'text-[#FEE2E2]'
                       : 'text-[#FEF08A]';
                 return (
                   <div
                     key={r.opponentKey}
-                    className="bg-[#0F1117] border border-white/20 rounded-[2px] px-3 py-2 flex items-center justify-between gap-3"
+                    className="bg-[#101520] border border-white/25 rounded-[2px] px-3 py-2 flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -647,11 +819,11 @@ const RivalriesCard: React.FC<{
                           {r.opponentName}
                         </span>
                         <RivalBadgeIcon rivalry={r} />
-                        <span className="font-mono text-[10px] font-medium text-[#CBD5E1] tabular-nums shrink-0">
+                        <span className="font-mono text-[10px] font-medium text-[#F8FAFC] tabular-nums shrink-0">
                           {total} {total === 1 ? 'Match' : 'Matches'}
                         </span>
                       </div>
-                      <div className="text-[10px] font-medium text-[#E2E8F0] tabular-nums mt-0.5">
+                      <div className="text-[10px] font-medium text-[#F8FAFC] tabular-nums mt-0.5">
                         Last:{' '}
                         <span className={`font-mono font-bold ${lastBadgeColor}`}>
                           {r.lastResult} {r.lastScoreFor}–{r.lastScoreAgainst}
@@ -681,7 +853,7 @@ const RivalriesCard: React.FC<{
                                 false
                               )
                             }
-                            className="min-h-[34px] px-2.5 py-1 rounded-[2px] bg-[#00ffaa]/20 hover:bg-[#00ffaa] border border-[#00ffaa]/70 text-[#00ffaa] hover:text-[#05070B] disabled:opacity-65 font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap"
+                            className="min-h-[34px] px-2.5 py-1 rounded-[2px] bg-[#04241B] hover:bg-[#00ffaa] border border-[#00ffaa]/75 text-[#A7F3D0] hover:text-[#05070B] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap"
                           >
                             {alreadySent ? 'Sent' : 'Challenge'}
                           </button>
@@ -690,16 +862,16 @@ const RivalriesCard: React.FC<{
                       <div className="text-right">
                         <div className="font-mono text-xs font-bold tabular-nums">
                           <span className="text-[#00ffaa]">{r.wins}W</span>
-                          <span className="text-[#CBD5E1]">–</span>
-                          <span className="text-[#FECACA]">{r.losses}L</span>
+                          <span className="text-[#F8FAFC]">–</span>
+                          <span className="text-[#FEE2E2]">{r.losses}L</span>
                           {r.draws > 0 && (
                             <>
-                              <span className="text-[#CBD5E1]">–</span>
+                              <span className="text-[#F8FAFC]">–</span>
                               <span className="text-[#FEF08A]">{r.draws}D</span>
                             </>
                           )}
                         </div>
-                        <div className="font-mono text-[10px] font-semibold text-[#E2E8F0] tabular-nums">
+                        <div className="font-mono text-[10px] font-semibold text-[#F8FAFC] tabular-nums">
                           {winRate}% Win
                         </div>
                       </div>
@@ -714,7 +886,7 @@ const RivalriesCard: React.FC<{
             <button
               type="button"
               onClick={() => setShowAll((prev) => !prev)}
-              className="w-full py-1.5 font-mono text-[10px] uppercase tracking-wider font-bold text-[#FFFFFF] bg-[#161922] hover:bg-[#222634] border border-white/25 rounded-[2px] transition-colors cursor-pointer"
+              className="w-full py-1.5 font-mono text-[10px] uppercase tracking-wider font-bold text-[#FFFFFF] bg-[#141824] hover:bg-[#1E2434] border border-white/30 rounded-[2px] transition-colors cursor-pointer"
             >
               {showAll ? 'Show Fewer Rivals' : `Show All Rivals (${listedRivals.length})`}
             </button>
@@ -813,7 +985,7 @@ const CourtShotHeatMap: React.FC<{
 
   return (
     <div
-      className="bg-[#07090E] border border-white/20 rounded-[2px] p-3.5 mb-4"
+      className="bg-[#05070B] border border-white/30 rounded-[2px] p-3.5 mb-4"
       aria-label="Court Floor Shot Heat Map"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
@@ -822,12 +994,12 @@ const CourtShotHeatMap: React.FC<{
             Court Shot Heat Map
           </span>
           {secondWindCount > 0 && (
-            <span className="font-mono text-[10px] font-bold text-[#00ffaa] bg-[#00ffaa]/18 border border-[#00ffaa]/60 px-1.5 py-0.5 rounded-[2px]">
+            <span className="font-mono text-[10px] font-bold text-[#A7F3D0] bg-[#04241B] border border-[#00ffaa]/70 px-1.5 py-0.5 rounded-[2px]">
               Second Wind ×{secondWindCount}
             </span>
           )}
         </div>
-        <div className="font-mono text-[10px] font-medium text-[#E2E8F0] tabular-nums">
+        <div className="font-mono text-[10px] font-medium text-[#F8FAFC] tabular-nums">
           {activeZone
             ? `${activeZone.label}: ${activeZone.made}/${activeZone.attempts} (${activeZone.pct}%)`
             : `${resolvedShots.filter((s) => s.status === 'MADE').length}/${resolvedShots.length} Made · Tap spot to inspect`}
@@ -835,7 +1007,7 @@ const CourtShotHeatMap: React.FC<{
       </div>
 
       {/* Half-Court Hardwood SVG Floor */}
-      <div className="relative bg-[#0F1117] border border-white/20 rounded-[2px] overflow-hidden">
+      <div className="relative bg-[#0A0D14] border border-white/25 rounded-[2px] overflow-hidden">
         <svg
           viewBox="-26.5 -5.4 53 49.8"
           className="w-full h-auto block select-none"
@@ -1096,7 +1268,7 @@ const CourtShotHeatMap: React.FC<{
       </div>
 
       {/* Compact Legend */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mt-2 font-mono text-[10px] font-medium text-[#E2E8F0]">
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-2 font-mono text-[10px] font-medium text-[#F8FAFC]">
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-[#6EE7B7]" />
@@ -1107,7 +1279,7 @@ const CourtShotHeatMap: React.FC<{
             <span>Money</span>
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="font-mono font-bold text-[#FECACA] leading-none">×</span>
+            <span className="font-mono font-bold text-[#FEE2E2] leading-none">×</span>
             <span>Miss</span>
           </span>
         </div>
@@ -1121,7 +1293,7 @@ const CourtShotHeatMap: React.FC<{
             <span>Warm</span>
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-[#FECACA]" />
+            <span className="w-2 h-2 rounded-full bg-[#FEE2E2]" />
             <span>Cold &lt;45%</span>
           </span>
         </div>
@@ -1241,21 +1413,21 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     if (!shareSnippet) return null;
     return (
       <div
-        className="fixed inset-0 z-30 flex items-center justify-center bg-[#05070B]/92 backdrop-blur-sm p-3 sm:p-5"
+        className="fixed inset-0 z-30 flex items-center justify-center bg-[#05070B]/94 backdrop-blur-sm p-3 sm:p-5"
         role="dialog"
         aria-modal="true"
         aria-label="Share Contest Scorecard"
       >
-        <div className="w-full max-w-xl bg-[#0F1117] border border-white/25 rounded-[4px] p-4 sm:p-5 shadow-2xl">
+        <div className="w-full max-w-xl bg-[#0A0D14] border border-white/35 rounded-[4px] p-4 sm:p-5 shadow-2xl">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#00ffaa] mb-0.5">
+              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa] mb-0.5">
                 Scorecard Export
               </div>
               <h3 className="font-display text-2xl font-extrabold uppercase tracking-tight text-[#FFFFFF] leading-none">
                 Share Scorecard
               </h3>
-              <p className="text-xs text-[#E2E8F0] mt-1">
+              <p className="text-xs text-[#F8FAFC] mt-1">
                 Copy your visual scorecard snippet or save as PNG
               </p>
             </div>
@@ -1263,13 +1435,13 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               type="button"
               onClick={() => setShareSnippet(null)}
               aria-label="Close Share Scorecard"
-              className="w-9 h-9 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 text-[#FFFFFF] flex items-center justify-center cursor-pointer transition-colors"
+              className="w-9 h-9 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] flex items-center justify-center cursor-pointer transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="rounded-[2px] overflow-hidden border border-white/25 bg-[#07090E] mb-3.5">
+          <div className="rounded-[2px] overflow-hidden border border-white/30 bg-[#05070B] mb-3.5">
             <img
               src={shareSnippet.dataUrl}
               alt="Downtown 3 visual scorecard showing score, best streak, and swish count"
@@ -1281,8 +1453,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <div
               className={`mb-3 px-3 py-2 rounded-[2px] font-mono text-[11px] font-semibold border ${
                 copyStatus === 'ERROR'
-                  ? 'bg-[#EF4444]/18 border-[#FECACA]/60 text-[#FECACA]'
-                  : 'bg-[#00ffaa]/15 border-[#00ffaa]/60 text-[#00ffaa]'
+                  ? 'bg-[#240A0E] border-[#FCA5A5]/75 text-[#FEE2E2]'
+                  : 'bg-[#04241B] border-[#00ffaa]/75 text-[#A7F3D0]'
               }`}
             >
               {copyNote}
@@ -1311,7 +1483,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <button
               type="button"
               onClick={handleCopyText}
-              className="min-h-[42px] px-3.5 py-2 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              className="min-h-[42px] px-3.5 py-2 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
               {copyStatus === 'TEXT_COPIED' ? (
                 <>
@@ -1329,7 +1501,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <a
               href={shareSnippet.dataUrl}
               download={shareSnippet.fileName}
-              className="min-h-[42px] px-3.5 py-2 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              className="min-h-[42px] px-3.5 py-2 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download PNG</span>
@@ -1370,63 +1542,63 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.22 }}
-        className="absolute inset-0 z-20 flex items-center justify-center bg-[#05070B]/90 backdrop-blur-sm p-3 sm:p-4"
+        className="absolute inset-0 z-20 flex items-center justify-center bg-[#05070B]/94 backdrop-blur-sm p-3 sm:p-4"
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 18 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 12 }}
           transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-          className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-[#0F1117] border border-white/25 rounded-[4px] p-5 sm:p-7 shadow-2xl"
+          className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-[#0A0D14] border border-white/35 rounded-[4px] p-5 sm:p-7 shadow-2xl"
         >
-          <div className="border-b border-white/20 pb-4 mb-4 flex items-end justify-between gap-3">
+          <div className="border-b border-white/30 pb-4 mb-4 flex items-end justify-between gap-3">
             <div className="min-w-0 flex-1">
               {hud.pvpMatch.leagueName && (
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[2px] bg-[#00ffaa]/18 border border-[#00ffaa]/60 font-mono text-[10px] font-bold uppercase tracking-wider text-[#00ffaa] mb-1.5 max-w-full">
-                  <Trophy className="w-3 h-3 shrink-0" />
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[2px] bg-[#04241B] border border-[#00ffaa]/75 font-mono text-[10px] font-bold uppercase tracking-wider text-[#A7F3D0] mb-1.5 max-w-full">
+                  <Trophy className="w-3 h-3 shrink-0 text-[#00ffaa]" />
                   <span className="truncate">{hud.pvpMatch.leagueName} · Standings Updated</span>
                 </div>
               )}
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#E2E8F0]">
+              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#F8FAFC]">
                 Online 1v1 Shootout{oppForfeited ? ' · Opponent Disconnected' : ''}
               </div>
               <h2
-                className={`font-display text-2xl sm:text-4xl font-extrabold uppercase tracking-tight leading-none mt-1 whitespace-nowrap ${
-                  iWon ? 'text-[#00ffaa]' : isTie ? 'text-[#FEF08A]' : 'text-[#FECACA]'
+                className={`font-display text-2xl sm:text-3xl font-extrabold uppercase tracking-tight leading-none mt-1 whitespace-nowrap ${
+                  iWon ? 'text-[#00ffaa]' : isTie ? 'text-[#FEF08A]' : 'text-[#FEE2E2]'
                 }`}
               >
                 {iWon ? 'Victory' : isTie ? 'Draw Match' : 'Defeat'}
               </h2>
             </div>
             <div className="text-right shrink-0">
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#E2E8F0] whitespace-nowrap">
+              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] whitespace-nowrap">
                 Final Margin
               </div>
-              <div className="font-mono text-xl sm:text-2xl font-bold text-[#FFFFFF] tabular-nums whitespace-nowrap mt-0.5">
+              <div className="font-mono text-lg sm:text-2xl font-bold text-[#FFFFFF] tabular-nums whitespace-nowrap mt-0.5">
                 {myScore} – {oppScore}
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-[#07090E] border border-[#00ffaa]/65 rounded-[2px] p-3.5 sm:p-4">
+            <div className="bg-[#05070B] border border-[#00ffaa]/75 rounded-[2px] p-3.5 sm:p-4">
               <div className="font-mono text-[11px] text-[#00ffaa] font-bold uppercase tracking-wider mb-1 truncate">
                 {me?.name ?? 'You'}
               </div>
               <div className="font-mono text-3xl sm:text-4xl font-bold text-[#FFFFFF] tabular-nums mb-2">
                 {myScore}
               </div>
-              <div className="font-mono text-[11px] font-medium text-[#E2E8F0] space-y-1 tabular-nums">
+              <div className="font-mono text-[11px] font-medium text-[#F8FAFC] space-y-1 tabular-nums">
                 <div>Made: {me?.madeCount ?? hud.madeCount}/{TOTAL_BALLS}</div>
                 <div>Swishes: {me?.swishCount ?? hud.swishCount}</div>
                 <div>Best Streak: {me?.bestStreak ?? hud.bestStreak}</div>
-                <div className="pt-1 border-t border-white/15 text-[10px] text-[#FFFFFF]">
+                <div className="pt-1 border-t border-white/25 text-[10px] text-[#FFFFFF]">
                   Record: {hud.career.pvpWins}W-{hud.career.pvpLosses}L-{hud.career.pvpDraws}D
                 </div>
               </div>
             </div>
 
-            <div className="bg-[#07090E] border border-white/25 rounded-[2px] p-3.5 sm:p-4 flex flex-col justify-between">
+            <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-3.5 sm:p-4 flex flex-col justify-between">
               <div>
                 <div className="font-mono text-[11px] text-[#FFFFFF] font-bold uppercase tracking-wider mb-1 truncate">
                   {opp?.name ?? 'Opponent'}
@@ -1434,12 +1606,12 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 <div className="font-mono text-3xl sm:text-4xl font-bold text-[#FFFFFF] tabular-nums mb-2">
                   {oppScore}
                 </div>
-                <div className="font-mono text-[11px] font-medium text-[#E2E8F0] space-y-1 tabular-nums">
+                <div className="font-mono text-[11px] font-medium text-[#F8FAFC] space-y-1 tabular-nums">
                   <div>Made: {opp?.madeCount ?? 0}/{TOTAL_BALLS}</div>
                   <div>Swishes: {opp?.swishCount ?? 0}</div>
                   <div>Best Streak: {opp?.bestStreak ?? 0}</div>
                   {opp?.record && (
-                    <div className="pt-1 border-t border-white/15 text-[10px] text-[#FFFFFF]">
+                    <div className="pt-1 border-t border-white/25 text-[10px] text-[#FFFFFF]">
                       Record: {opp.record.wins}W-{opp.record.losses}L-{opp.record.draws}D
                     </div>
                   )}
@@ -1450,7 +1622,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 const existing = friendships.find((f) => f.friendUid === opp.uid);
                 if (existing?.status === 'ACCEPTED') {
                   return (
-                    <div className="mt-2.5 pt-2 border-t border-white/15 inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase text-[#00ffaa]">
+                    <div className="mt-2.5 pt-2 border-t border-white/25 inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase text-[#00ffaa]">
                       <UserCheck className="w-3.5 h-3.5" />
                       <span>Friends</span>
                     </div>
@@ -1470,7 +1642,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                           setFriendBusy(false);
                         }
                       }}
-                      className="mt-2.5 w-full min-h-[38px] px-2.5 py-1.5 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-[10px] font-bold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      className="mt-2.5 w-full min-h-[38px] px-2.5 py-1.5 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-[10px] font-bold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>Accept Friend</span>
@@ -1479,7 +1651,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 }
                 if (existing?.status === 'PENDING') {
                   return (
-                    <div className="mt-2.5 pt-2 border-t border-white/15 font-mono text-[10px] font-semibold uppercase text-[#FEF08A]">
+                    <div className="mt-2.5 pt-2 border-t border-white/25 font-mono text-[10px] font-semibold uppercase text-[#FEF08A]">
                       Friend Request Sent
                     </div>
                   );
@@ -1503,7 +1675,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                         setFriendBusy(false);
                       }
                     }}
-                    className="mt-2.5 w-full min-h-[38px] px-2.5 py-1.5 rounded-[2px] bg-[#161922] hover:bg-[#00ffaa] border border-white/25 hover:border-[#00ffaa] disabled:opacity-65 text-[#FFFFFF] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="mt-2.5 w-full min-h-[38px] px-2.5 py-1.5 rounded-[2px] bg-[#141824] hover:bg-[#00ffaa] border border-white/35 hover:border-[#00ffaa] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] disabled:border-white/20 text-[#FFFFFF] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                     <span>{friendBusy ? 'Sending...' : 'Add Friend'}</span>
@@ -1514,9 +1686,24 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
 
           {friendStatusMsg && (
-            <div className="mb-3 px-3 py-2 rounded-[2px] bg-[#00ffaa]/15 border border-[#00ffaa]/60 font-mono text-[11px] font-semibold text-[#00ffaa]">
+            <div className="mb-3 px-3 py-2 rounded-[2px] bg-[#04241B] border border-[#00ffaa]/75 font-mono text-[11px] font-semibold text-[#A7F3D0]">
               {friendStatusMsg}
             </div>
+          )}
+
+          {opp && (
+            <RivalryUpdatePanel
+              rivalry={
+                hud.rivalries.find(
+                  (r) => r.opponentKey === normalizeOpponentKey(opp.name)
+                ) ?? null
+              }
+              opponentName={opp.name}
+              myScore={myScore}
+              oppScore={oppScore}
+              iWon={iWon}
+              isTie={isTie}
+            />
           )}
 
           {hud.contestHighlight && onOpenHighlightReplay && (
@@ -1543,6 +1730,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           <RivalriesCard
             rivalries={hud.rivalries}
             activeOpponentName={opp?.name}
+            hideActiveRival={Boolean(opp)}
             friendships={friendships}
             friendStatuses={friendStatuses}
             outgoingInvite={outgoingInvite}
@@ -1550,9 +1738,9 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           />
 
           {/* Career Totals Footer Strip */}
-          <div className="grid grid-cols-4 gap-2 bg-[#07090E] border border-white/20 rounded-[2px] p-3 mb-5 text-center">
+          <div className="grid grid-cols-4 gap-2 bg-[#05070B] border border-white/30 rounded-[2px] p-3 mb-5 text-center">
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+              <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#F8FAFC]">
                 Career Pts
               </div>
               <div className="font-mono text-sm font-bold text-[#00ffaa] tabular-nums">
@@ -1560,15 +1748,15 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               </div>
             </div>
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+              <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#F8FAFC]">
                 Career Makes
               </div>
-              <div className="font-mono text-sm font-bold text-[#6EE7B7] tabular-nums">
+              <div className="font-mono text-sm font-bold text-[#A7F3D0] tabular-nums">
                 {hud.career.totalShotsMade}
               </div>
             </div>
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+              <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#F8FAFC]">
                 Best Streak
               </div>
               <div className="font-mono text-sm font-bold text-[#FEF08A] tabular-nums">
@@ -1576,7 +1764,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               </div>
             </div>
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+              <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#F8FAFC]">
                 W-L-D
               </div>
               <div className="font-mono text-sm font-bold text-[#FFFFFF] tabular-nums">
@@ -1591,7 +1779,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 type="button"
                 disabled={me?.rematchReady}
                 onClick={onRequestRematch}
-                className="w-full sm:w-auto sm:flex-1 min-w-0 min-h-[48px] px-3.5 py-3 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-xs sm:text-sm font-extrabold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap text-center"
+                className="w-full sm:w-auto sm:flex-1 min-w-0 min-h-[48px] px-3 py-3 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs font-extrabold uppercase tracking-wide transition-colors cursor-pointer whitespace-nowrap text-center"
               >
                 {me?.rematchReady
                   ? 'Waiting for Rival...'
@@ -1604,7 +1792,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onCancelMatchInvite(outgoingInvite.inviteId)}
-                  className="w-full sm:w-auto sm:flex-1 min-w-0 min-h-[48px] py-3 px-3.5 rounded-[2px] bg-[#FEF08A]/18 border border-[#FEF08A]/70 text-[#FEF08A] hover:bg-[#FEF08A]/28 font-mono text-xs font-bold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                  className="w-full sm:w-auto sm:flex-1 min-w-0 min-h-[48px] py-3 px-3.5 rounded-[2px] bg-[#1F1804] border border-[#FDE047]/80 text-[#FEF08A] hover:bg-[#2E2306] font-mono text-xs font-bold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
                 >
                   <Clock className="w-4 h-4 shrink-0" />
                   <span>Rematch Sent · Cancel</span>
@@ -1614,7 +1802,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                   type="button"
                   disabled={Boolean(outgoingInvite)}
                   onClick={() => onSendMatchInvite(opp.uid!, opp.name, true)}
-                  className="w-full sm:w-auto sm:flex-1 min-w-0 min-h-[48px] py-3 px-3.5 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-xs sm:text-sm font-extrabold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap text-center"
+                  className="w-full sm:w-auto sm:flex-1 min-w-0 min-h-[48px] py-3 px-3.5 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs sm:text-sm font-extrabold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap text-center"
                 >
                   Send Rematch Request
                 </button>
@@ -1625,7 +1813,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 type="button"
                 onClick={handleOpenShare}
                 disabled={isGeneratingShare}
-                className="flex-1 sm:flex-initial min-h-[48px] px-4 py-3 rounded-[2px] bg-[#FFFFFF] hover:bg-[#E2E8F0] disabled:opacity-65 text-[#05070B] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                className="flex-1 sm:flex-initial min-h-[48px] px-4 py-3 rounded-[2px] bg-[#FFFFFF] hover:bg-[#E2E8F0] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
               >
                 <Share2 className="w-4 h-4 shrink-0" />
                 <span>{isGeneratingShare ? 'Creating...' : 'Share'}</span>
@@ -1633,7 +1821,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               <button
                 type="button"
                 onClick={onBackToTitle}
-                className="flex-1 sm:flex-initial min-h-[48px] px-4 py-3 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap"
+                className="flex-1 sm:flex-initial min-h-[48px] px-4 py-3 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap"
               >
                 Lobby
               </button>
@@ -1655,19 +1843,19 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.22 }}
-      className="absolute inset-0 z-20 flex items-center justify-center bg-[#05070B]/90 backdrop-blur-sm p-3 sm:p-4"
+      className="absolute inset-0 z-20 flex items-center justify-center bg-[#05070B]/94 backdrop-blur-sm p-3 sm:p-4"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 18 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 12 }}
         transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-        className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-[#0F1117] border border-white/25 rounded-[4px] p-5 sm:p-7 shadow-2xl"
+        className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-[#0A0D14] border border-white/35 rounded-[4px] p-5 sm:p-7 shadow-2xl"
       >
         {/* Header */}
-        <div className="flex items-end justify-between gap-4 border-b border-white/20 pb-4 mb-4">
+        <div className="flex items-end justify-between gap-4 border-b border-white/30 pb-4 mb-4">
           <div className="min-w-0 flex-1">
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#E2E8F0] mb-1">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#F8FAFC] mb-1">
               {isFastBreak
                 ? 'Fast-Break Complete'
                 : isHeatCheck
@@ -1697,7 +1885,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
 
           <div className="text-right shrink-0">
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#E2E8F0] whitespace-nowrap">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#F8FAFC] whitespace-nowrap">
               {isFastBreak ? 'Best Time' : 'Personal Best'}
             </div>
             <div className="font-mono text-xl sm:text-2xl font-bold text-[#00ffaa] tabular-nums whitespace-nowrap mt-0.5">
@@ -1712,32 +1900,32 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
         {/* 4-Column Contest Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
-          <div className="bg-[#07090E] border border-white/20 rounded-[2px] p-2.5 sm:p-3">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0]">
+          <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-2.5 sm:p-3">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#F8FAFC]">
               Made
             </div>
             <div className="font-mono text-lg sm:text-xl font-bold text-[#FFFFFF] tabular-nums">
               {isHeatCheck ? `${hud.madeCount}` : `${hud.madeCount}/${TOTAL_BALLS}`}
             </div>
           </div>
-          <div className="bg-[#07090E] border border-white/20 rounded-[2px] p-2.5 sm:p-3">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0]">
+          <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-2.5 sm:p-3">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#F8FAFC]">
               Accuracy
             </div>
             <div className="font-mono text-lg sm:text-xl font-bold text-[#FFFFFF] tabular-nums">
               {fgPct}%
             </div>
           </div>
-          <div className="bg-[#07090E] border border-white/20 rounded-[2px] p-2.5 sm:p-3">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0]">
+          <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-2.5 sm:p-3">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#F8FAFC]">
               {isHeatCheck ? 'Heat Streak' : 'Streak'}
             </div>
             <div className="font-mono text-lg sm:text-xl font-bold text-[#00ffaa] tabular-nums">
               {hud.bestStreak}
             </div>
           </div>
-          <div className="bg-[#07090E] border border-white/20 rounded-[2px] p-2.5 sm:p-3">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0]">
+          <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-2.5 sm:p-3">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#F8FAFC]">
               Money Balls
             </div>
             <div className="font-mono text-lg sm:text-xl font-bold text-[#FEF08A] tabular-nums">
@@ -1749,7 +1937,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         {/* Fast-Break 5-Rack Split Breakdown */}
         {isFastBreak && (
           <div
-            className="bg-[#07090E] border border-[#00ffaa]/60 rounded-[2px] p-3.5 mb-4"
+            className="bg-[#05070B] border border-[#00ffaa]/75 rounded-[2px] p-3.5 mb-4"
             aria-label="Fast-Break Split Breakdown"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
@@ -1759,7 +1947,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                   6-Spot Split Breakdown
                 </span>
               </div>
-              <span className="font-mono text-[10px] font-medium text-[#E2E8F0] tabular-nums">
+              <span className="font-mono text-[10px] font-semibold text-[#F8FAFC] tabular-nums">
                 {hud.careerBaseline.bestFastBreakMs > 0
                   ? `vs PB ${formatFastBreakMs(hud.careerBaseline.bestFastBreakMs)}`
                   : '1st Time-Attack Run'}
@@ -1770,7 +1958,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               {hud.fastBreakSplits.map((sp) => (
                 <div
                   key={sp.rackIndex}
-                  className="bg-[#0F1117] border border-white/20 rounded-[2px] p-2 text-center"
+                  className="bg-[#101520] border border-white/30 rounded-[2px] p-2 text-center"
                 >
                   <div className="font-mono text-[10px] font-bold text-[#00ffaa]">
                     {sp.shortLabel}
@@ -1778,13 +1966,13 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                   <div className="font-mono text-xs font-extrabold text-[#FFFFFF] tabular-nums mt-0.5">
                     {sp.lapMs !== null ? formatFastBreakMs(sp.lapMs) : '—'}
                   </div>
-                  <div className="font-mono text-[10px] font-medium text-[#CBD5E1] tabular-nums">
+                  <div className="font-mono text-[10px] font-medium text-[#F8FAFC] tabular-nums">
                     {sp.cumulativeMs !== null ? `@${formatFastBreakMs(sp.cumulativeMs)}` : '—'}
                   </div>
                   {sp.deltaMs !== null && (
                     <div
                       className={`font-mono text-[10px] font-bold tabular-nums mt-0.5 ${
-                        sp.deltaMs <= 0 ? 'text-[#00ffaa]' : 'text-[#FECACA]'
+                        sp.deltaMs <= 0 ? 'text-[#00ffaa]' : 'text-[#FEE2E2]'
                       }`}
                     >
                       {formatSplitDeltaMs(sp.deltaMs)}
@@ -1833,7 +2021,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
         {/* 6-Spot Shot Breakdown */}
         <div className="mb-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0] mb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] font-bold uppercase tracking-wider text-[#F8FAFC] mb-2">
             <span>{isHeatCheck ? 'Active Rack Snapshot' : 'Rack + Half-Court Breakdown'}</span>
             <span>
               Swishes: {hud.swishCount} ·{' '}
@@ -1853,14 +2041,14 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               return (
                 <div
                   key={rack.id}
-                  className="bg-[#07090E] border border-white/20 rounded-[2px] p-2 flex flex-col items-center gap-1.5"
+                  className="bg-[#05070B] border border-white/30 rounded-[2px] p-2 flex flex-col items-center gap-1.5"
                 >
                   <span className="font-mono text-[10px] sm:text-[11px] font-bold text-[#FFFFFF] whitespace-nowrap">
                     {rack.shortLabel}
                   </span>
                   <div className="flex items-center gap-0.5 sm:gap-1">
                     {rackBalls.map((b, i) => {
-                      let color = 'bg-white/25';
+                      let color = 'bg-white/30';
                       if (b.status === 'MADE') {
                         color = b.isMoney ? 'bg-[#FBBF24]' : 'bg-[#00ffaa]';
                       } else if (b.status === 'MISSED') {
@@ -1889,13 +2077,13 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         </div>
 
         {/* Cumulative Career Stats Across All Sessions */}
-        <div className="border-t border-white/20 pt-3.5 mb-5">
-          <div className="font-mono text-[10px] uppercase tracking-[0.12em] font-semibold text-[#E2E8F0] mb-2">
+        <div className="border-t border-white/30 pt-3.5 mb-5">
+          <div className="font-mono text-[10px] uppercase tracking-[0.12em] font-bold text-[#F8FAFC] mb-2">
             Career Totals ({hud.career.contestsPlayed} Contests)
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center bg-[#07090E] border border-white/20 rounded-[2px] p-2.5">
+          <div className="grid grid-cols-3 gap-2 text-center bg-[#05070B] border border-white/30 rounded-[2px] p-2.5">
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+              <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#F8FAFC]">
                 Career Score
               </div>
               <div className="font-mono text-sm sm:text-base font-bold text-[#00ffaa] tabular-nums">
@@ -1903,15 +2091,15 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               </div>
             </div>
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+              <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#F8FAFC]">
                 Shots Made
               </div>
-              <div className="font-mono text-sm sm:text-base font-bold text-[#6EE7B7] tabular-nums">
+              <div className="font-mono text-sm sm:text-base font-bold text-[#A7F3D0] tabular-nums">
                 {hud.career.totalShotsMade}
               </div>
             </div>
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-[#E2E8F0]">
+              <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#F8FAFC]">
                 All-Time Streak
               </div>
               <div className="font-mono text-sm sm:text-base font-bold text-[#FEF08A] tabular-nums">
@@ -1935,7 +2123,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               type="button"
               onClick={handleOpenShare}
               disabled={isGeneratingShare}
-              className="flex-1 sm:flex-initial min-h-[48px] px-4 py-3 rounded-[2px] bg-[#FFFFFF] hover:bg-[#E2E8F0] disabled:opacity-65 text-[#05070B] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              className="flex-1 sm:flex-initial min-h-[48px] px-4 py-3 rounded-[2px] bg-[#FFFFFF] hover:bg-[#E2E8F0] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
               <Share2 className="w-4 h-4 shrink-0" />
               <span>{isGeneratingShare ? 'Creating...' : 'Share'}</span>
@@ -1943,7 +2131,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <button
               type="button"
               onClick={onBackToTitle}
-              className="flex-1 sm:flex-initial min-h-[48px] px-4 py-3 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap"
+              className="flex-1 sm:flex-initial min-h-[48px] px-4 py-3 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap"
             >
               Lobby
             </button>

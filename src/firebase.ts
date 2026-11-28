@@ -27,7 +27,6 @@ import firebaseConfig from '../firebase-applet-config.json';
 import { normalizeOpponentKey, normalizeSplitsArray } from './game/storage';
 import {
   CareerStats,
-  CourtRankingEntry,
   CourtThemeId,
   FriendshipRecord,
   FriendshipStatus,
@@ -393,7 +392,7 @@ export async function updateUserUsernameAtomic(
     if (!fresh) {
       throw new Error('Could not reload updated profile.');
     }
-    void refreshCourtRankingUsernames(uid, cleanNew);
+    void refreshGlobalRankingUsername(uid, cleanNew);
     return fresh;
   } catch (error) {
     if (error instanceof Error && error.message === 'That username is already taken.') {
@@ -1173,161 +1172,19 @@ const VALID_COURT_IDS: CourtThemeId[] = [
   'championship_gold',
 ];
 
-function mapCourtRankingDoc(
-  courtId: CourtThemeId,
-  docId: string,
-  data: Record<string, unknown>
-): CourtRankingEntry {
-  const bestScore = Math.max(0, Math.min(50000, Math.round(Number(data.bestScore) || 0)));
-  const lastScore = Math.max(0, Math.min(bestScore, Math.round(Number(data.lastScore) || 0)));
-  return {
-    uid: String(data.uid ?? docId),
-    courtId,
-    username: String(data.username ?? 'Shooter'),
-    bestScore,
-    bestStreak: Math.max(0, Math.min(500, Math.round(Number(data.bestStreak) || 0))),
-    totalSwishes: Math.max(0, Math.min(10000000, Math.round(Number(data.totalSwishes) || 0))),
-    contestsPlayed: Math.max(1, Math.min(1000000, Math.round(Number(data.contestsPlayed) || 1))),
-    lastScore,
-    updatedAtMs: toMillis(data.updatedAt),
-  };
-}
-
-async function refreshCourtRankingUsernames(uid: string, cleanUsername: string): Promise<void> {
+async function refreshGlobalRankingUsername(uid: string, cleanUsername: string): Promise<void> {
   const safeName = sanitizeBlueprintUsername(cleanUsername);
-  await Promise.all(
-    VALID_COURT_IDS.map(async (courtId) => {
-      try {
-        const entryRef = doc(db, 'courtRankings', courtId, 'entries', uid);
-        const snap = await getDoc(entryRef);
-        if (snap.exists()) {
-          await updateDoc(entryRef, {
-            username: safeName,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } catch {
-        // Non-fatal: court entry username also refreshes on next completed contest
-      }
-    }),
-    (async () => {
-      try {
-        const globalRef = doc(db, 'pvpGlobalRankings', uid);
-        const globalSnap = await getDoc(globalRef);
-        if (globalSnap.exists()) {
-          await updateDoc(globalRef, {
-            username: safeName,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } catch {
-        // Non-fatal: global PVP ranking username also refreshes on next PVP match
-      }
-    })(),
-  );
-}
-
-export async function syncCourtRankingToFirestore(
-  uid: string,
-  username: string,
-  courtId: CourtThemeId,
-  contestScore: number,
-  contestBestStreak: number,
-  contestSwishes: number
-): Promise<void> {
-  const path = `courtRankings/${courtId}/entries/${uid}`;
-  const cleanName = sanitizeBlueprintUsername(username);
-  const clampedScore = Math.max(0, Math.min(50000, Math.round(contestScore)));
-  const clampedStreak = Math.max(0, Math.min(500, Math.round(contestBestStreak)));
-  const clampedSwishes = Math.max(0, Math.min(10000000, Math.round(contestSwishes)));
-
   try {
-    const entryRef = doc(db, 'courtRankings', courtId, 'entries', uid);
-    const existingSnap = await getDoc(entryRef);
-    if (!existingSnap.exists()) {
-      await setDoc(entryRef, {
-        uid,
-        courtId,
-        username: cleanName,
-        bestScore: clampedScore,
-        bestStreak: clampedStreak,
-        totalSwishes: clampedSwishes,
-        contestsPlayed: 1,
-        lastScore: clampedScore,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      const prev = existingSnap.data();
-      const prevBestScore = Math.max(0, Math.min(50000, Math.round(Number(prev.bestScore) || 0)));
-      const prevBestStreak = Math.max(0, Math.min(500, Math.round(Number(prev.bestStreak) || 0)));
-      const prevSwishes = Math.max(
-        0,
-        Math.min(10000000, Math.round(Number(prev.totalSwishes) || 0))
-      );
-      const prevContests = Math.max(
-        0,
-        Math.min(1000000, Math.round(Number(prev.contestsPlayed) || 0))
-      );
-      await updateDoc(entryRef, {
-        username: cleanName,
-        bestScore: Math.max(prevBestScore, clampedScore),
-        bestStreak: Math.max(prevBestStreak, clampedStreak),
-        totalSwishes: Math.min(10000000, prevSwishes + clampedSwishes),
-        contestsPlayed: Math.min(1000000, Math.max(1, prevContests + 1)),
-        lastScore: clampedScore,
+    const globalRef = doc(db, 'pvpGlobalRankings', uid);
+    const globalSnap = await getDoc(globalRef);
+    if (globalSnap.exists()) {
+      await updateDoc(globalRef, {
+        username: safeName,
         updatedAt: serverTimestamp(),
       });
     }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
-}
-
-export async function fetchCourtRankings(
-  courtId: CourtThemeId,
-  currentUid?: string | null,
-  topLimit = 25
-): Promise<{
-  entries: CourtRankingEntry[];
-  myEntry: CourtRankingEntry | null;
-  myRank: number | null;
-}> {
-  const path = `courtRankings/${courtId}/entries`;
-  try {
-    const q = query(
-      collection(db, 'courtRankings', courtId, 'entries'),
-      where('bestScore', '>=', 0),
-      orderBy('bestScore', 'desc'),
-      limit(topLimit)
-    );
-    const snap = await getDocs(q);
-    const entries = snap.docs.map((d) => mapCourtRankingDoc(courtId, d.id, d.data()));
-    entries.sort((a, b) => {
-      if (b.bestScore !== a.bestScore) return b.bestScore - a.bestScore;
-      if (b.bestStreak !== a.bestStreak) return b.bestStreak - a.bestStreak;
-      if (b.totalSwishes !== a.totalSwishes) return b.totalSwishes - a.totalSwishes;
-      return a.updatedAtMs - b.updatedAtMs;
-    });
-
-    let myRank: number | null = null;
-    let myEntry: CourtRankingEntry | null = null;
-    if (currentUid) {
-      const idx = entries.findIndex((entry) => entry.uid === currentUid);
-      if (idx >= 0) {
-        myRank = idx + 1;
-        myEntry = entries[idx];
-      } else {
-        const mySnap = await getDoc(doc(db, 'courtRankings', courtId, 'entries', currentUid));
-        if (mySnap.exists()) {
-          myEntry = mapCourtRankingDoc(courtId, mySnap.id, mySnap.data());
-        }
-      }
-    }
-
-    return { entries, myEntry, myRank };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, path);
+  } catch {
+    // Non-fatal: global PVP ranking username also refreshes on next PVP match
   }
 }
 

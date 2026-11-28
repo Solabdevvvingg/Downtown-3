@@ -286,21 +286,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         : 'Sign in with Google to save your career stats, join PVP Leagues, and challenge friends online.';
 
   return (
-    <div className="fixed inset-0 z-[45] flex items-center justify-center bg-[#05070B]/90 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:p-6 overflow-y-auto">
-      <div className="w-full max-w-md max-h-[94dvh] overflow-y-auto bg-[#0F1117] border border-white/25 rounded-[4px] p-5 sm:p-7 my-auto shadow-2xl">
+    <div className="fixed inset-0 z-[45] flex items-center justify-center bg-[#05070B]/94 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:p-6 overflow-y-auto">
+      <div className="w-full max-w-md max-h-[94dvh] overflow-y-auto bg-[#0A0D14] border border-white/35 rounded-[4px] p-5 sm:p-7 my-auto shadow-2xl">
         {/* Brand Header */}
-        <div className="border-b border-white/20 pb-4 mb-5">
+        <div className="border-b border-white/25 pb-4 mb-5">
           <div className="font-display text-3xl sm:text-4xl font-extrabold uppercase tracking-[-0.04em] leading-none text-[#00ffaa]">
             Downtown 3
           </div>
-          <p className="text-xs sm:text-sm text-[#E2E8F0] mt-2 leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#F8FAFC] mt-2 leading-relaxed">
             {headerSubtitle}
           </p>
         </div>
 
         {profileSyncing && firebaseUser ? (
           <div className="space-y-4">
-            <div className="bg-[#07090E] border border-white/20 rounded-[2px] px-3.5 py-2.5 text-xs text-[#E2E8F0]">
+            <div className="bg-[#05070B] border border-white/30 rounded-[2px] px-3.5 py-2.5 text-xs text-[#F8FAFC]">
               Signed in as{' '}
               <span className="font-bold text-[#FFFFFF]">
                 {firebaseUser.email || firebaseUser.displayName || 'Player'}
@@ -313,14 +313,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </div>
         ) : mode === 'PROFILE_ERROR' && firebaseUser ? (
           <div className="space-y-4">
-            <div className="bg-[#07090E] border border-white/20 rounded-[2px] px-3.5 py-2.5 text-xs text-[#E2E8F0]">
+            <div className="bg-[#05070B] border border-white/30 rounded-[2px] px-3.5 py-2.5 text-xs text-[#F8FAFC]">
               Signed in as{' '}
               <span className="font-bold text-[#FFFFFF]">
                 {firebaseUser.email || firebaseUser.displayName || 'Player'}
               </span>
             </div>
 
-            <div className="text-xs font-semibold text-[#FECACA] bg-[#EF4444]/18 border border-[#FECACA]/60 rounded-[2px] px-3.5 py-3 leading-relaxed">
+            <div className="text-xs font-semibold text-[#FEE2E2] bg-[#240A0E] border border-[#FCA5A5]/80 rounded-[2px] px-3.5 py-3 leading-relaxed">
               {profileLoadError || 'Could not load your saved profile from Firestore.'}
             </div>
 
@@ -336,12 +336,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <button
               type="button"
               onClick={handleSwitchAccount}
-              className="w-full py-2 text-xs font-semibold text-[#E2E8F0] hover:text-[#FFFFFF] transition-colors cursor-pointer"
+              className="w-full py-2 text-xs font-semibold text-[#FFFFFF] hover:text-[#00ffaa] transition-colors cursor-pointer"
             >
               Sign out &amp; use a different Google account
             </button>
 
-            <div className="pt-2 border-t border-white/20 text-center">
+            <div className="pt-2 border-t border-white/25 text-center">
               <button
                 type="button"
                 onClick={onContinueAsGuest}
@@ -353,7 +353,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </div>
         ) : mode === 'USERNAME_SETUP' && firebaseUser ? (
           <form onSubmit={handleUsernameSetupSubmit} className="space-y-4">
-            <div className="bg-[#07090E] border border-white/20 rounded-[2px] px-3.5 py-2.5 text-xs text-[#E2E8F0]">
+            <div className="bg-[#05070B] border border-white/30 rounded-[2px] px-3.5 py-2.5 text-xs text-[#F8FAFC]">
               Signed in as{' '}
               <span className="font-bold text-[#FFFFFF]">
                 {firebaseUser.email || firebaseUser.displayName || 'Player'}
@@ -375,15 +375,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 value={username}
                 onChange={(ev) => setUsername(ev.target.value)}
                 placeholder="e.g. CurryRange30"
-                className="w-full px-3.5 py-2.5 rounded-[2px] bg-[#07090E] border border-white/30 text-base sm:text-sm text-[#FFFFFF] placeholder:text-[#CBD5E1] focus:outline-none focus:border-[#00ffaa]"
+                className="w-full px-3.5 py-2.5 rounded-[2px] bg-[#05070B] border border-white/40 text-base sm:text-sm text-[#FFFFFF] placeholder:text-[#E2E8F0] focus:outline-none focus:border-[#00ffaa]"
               />
-              <div className="text-[11px] font-medium text-[#E2E8F0] mt-1.5">
+              <div className="text-[11px] font-medium text-[#F8FAFC] mt-1.5">
                 3–16 characters · letters, numbers, and underscores only
               </div>
             </div>
 
             {error && (
-              <div className="text-xs font-semibold text-[#FECACA] bg-[#EF4444]/18 border border-[#FECACA]/60 rounded-[2px] px-3 py-2">
+              <div className="text-xs font-semibold text-[#FEE2E2] bg-[#240A0E] border border-[#FCA5A5]/80 rounded-[2px] px-3 py-2">
                 {error}
               </div>
             )}
@@ -391,7 +391,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full min-h-[48px] py-3.5 px-4 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-sans text-sm sm:text-base font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
+              className="w-full min-h-[48px] py-3.5 px-4 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-sans text-sm sm:text-base font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
             >
               {submitting ? 'Claiming Username...' : 'Enter Arena'}
             </button>
@@ -399,18 +399,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <button
               type="button"
               onClick={handleSwitchAccount}
-              className="w-full py-2 text-xs font-semibold text-[#E2E8F0] hover:text-[#FFFFFF] transition-colors cursor-pointer"
+              className="w-full py-2 text-xs font-semibold text-[#FFFFFF] hover:text-[#00ffaa] transition-colors cursor-pointer"
             >
               Sign out &amp; use a different Google account
             </button>
           </form>
         ) : (
           <div className="space-y-4">
-            <div className="bg-[#07090E] border border-white/20 rounded-[2px] p-3.5 space-y-2">
+            <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-3.5 space-y-2">
               <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#00ffaa] font-bold">
                 Cloud Profile Perks
               </div>
-              <ul className="text-xs text-[#E2E8F0] space-y-1 leading-relaxed">
+              <ul className="text-xs text-[#F8FAFC] space-y-1 leading-relaxed">
                 <li>• Sync Career Highs, Streaks &amp; Fast-Break Splits across devices</li>
                 <li>• Add PVP Opponents as Friends &amp; send live Rematch invites</li>
                 <li>• Create &amp; compete in Online PVP Leagues</li>
@@ -418,7 +418,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </div>
 
             {error && (
-              <div className="text-xs font-semibold text-[#FECACA] bg-[#EF4444]/18 border border-[#FECACA]/60 rounded-[2px] px-3 py-2.5 leading-relaxed">
+              <div className="text-xs font-semibold text-[#FEE2E2] bg-[#240A0E] border border-[#FCA5A5]/80 rounded-[2px] px-3 py-2.5 leading-relaxed">
                 {error}
               </div>
             )}
@@ -428,7 +428,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               type="button"
               disabled={submitting}
               onClick={() => void handleGoogleSignIn()}
-              className="w-full flex items-center justify-center gap-3 min-h-[48px] py-3 px-4 rounded-[2px] bg-[#FFFFFF] hover:bg-[#E2E8F0] disabled:opacity-65 text-[#05070B] text-sm font-extrabold uppercase tracking-wide transition-colors cursor-pointer shadow-lg"
+              className="w-full flex items-center justify-center gap-3 min-h-[48px] py-3 px-4 rounded-[2px] bg-[#FFFFFF] hover:bg-[#E2E8F0] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] text-sm font-extrabold uppercase tracking-wide transition-colors cursor-pointer shadow-lg"
             >
               <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                 <path
@@ -457,14 +457,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   type="button"
                   disabled={submitting}
                   onClick={handleGisFallbackSignIn}
-                  className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0] hover:text-[#FFFFFF] underline underline-offset-2 transition-colors cursor-pointer"
+                  className="font-mono text-[10px] uppercase tracking-wider text-[#FFFFFF] hover:text-[#00ffaa] underline underline-offset-2 transition-colors cursor-pointer"
                 >
                   Or try direct Google OAuth sign-in
                 </button>
               </div>
             )}
 
-            <div className="pt-2 border-t border-white/20 text-center">
+            <div className="pt-2 border-t border-white/25 text-center">
               <button
                 type="button"
                 disabled={submitting}

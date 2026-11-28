@@ -61,8 +61,8 @@ const PRESENCE_META: Record<
   },
   OFFLINE: {
     label: 'Offline',
-    dotClass: 'bg-[#94A3B8]',
-    textClass: 'text-[#CBD5E1]',
+    dotClass: 'bg-[#E2E8F0]',
+    textClass: 'text-[#F1F5F9]',
   },
 };
 
@@ -188,10 +188,10 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 12 }}
         transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-        className="w-full max-w-xl max-h-[90dvh] flex flex-col bg-[#0F1117] border border-white/25 rounded-[4px] shadow-2xl overflow-hidden"
+        className="w-full max-w-xl max-h-[90dvh] flex flex-col bg-[#0A0D14] border border-white/35 rounded-[4px] shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="px-4 sm:px-6 py-4 bg-[#07090E] border-b border-white/20 flex items-center justify-between gap-3 shrink-0">
+        <div className="px-4 sm:px-6 py-4 bg-[#05070B] border-b border-white/25 flex items-center justify-between gap-3 shrink-0">
           <div className="min-w-0">
             <div className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#00ffaa]">
               Social &amp; Direct Challenges
@@ -204,7 +204,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close Friends Roster"
-            className="min-w-[44px] min-h-[44px] rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 text-[#FFFFFF] flex items-center justify-center cursor-pointer transition-colors shrink-0"
+            className="min-w-[44px] min-h-[44px] rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] flex items-center justify-center cursor-pointer transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -213,14 +213,14 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
           {!userProfile ? (
-            <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-5 text-center space-y-3">
-              <div className="w-11 h-11 rounded-[2px] bg-[#00ffaa]/15 border border-[#00ffaa]/60 text-[#00ffaa] flex items-center justify-center mx-auto">
+            <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-5 text-center space-y-3">
+              <div className="w-11 h-11 rounded-[2px] bg-[#04241B] border border-[#00ffaa]/75 text-[#00ffaa] flex items-center justify-center mx-auto">
                 <Users className="w-5 h-5" />
               </div>
               <div className="font-display text-xl font-extrabold uppercase tracking-tight text-[#FFFFFF]">
                 Sign In to Connect with Rivals
               </div>
-              <p className="text-xs text-[#E2E8F0] leading-relaxed max-w-sm mx-auto">
+              <p className="text-xs text-[#F8FAFC] leading-relaxed max-w-sm mx-auto">
                 Claim your persistent @username to add PVP opponents as friends, track live online status, and send instant 1v1 match requests.
               </p>
               <button
@@ -239,12 +239,12 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
               {/* Add Friend by Username */}
               <form
                 onSubmit={handleAddSubmit}
-                className="bg-[#07090E] border border-white/20 rounded-[4px] p-3.5 space-y-2.5"
+                className="bg-[#05070B] border border-white/30 rounded-[4px] p-3.5 space-y-2.5"
               >
                 <div className="flex items-center justify-between gap-2">
                   <label
                     htmlFor="add-friend-username"
-                    className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#E2E8F0]"
+                    className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#FFFFFF]"
                   >
                     Add Shooter by @Username
                   </label>
@@ -260,12 +260,12 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                     onChange={(ev) => setSearchInput(ev.target.value)}
                     placeholder="@shooter_handle"
                     maxLength={20}
-                    className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-[2px] bg-[#0F1117] border border-white/30 font-mono text-sm text-[#FFFFFF] placeholder:text-[#CBD5E1] focus:outline-none focus:border-[#00ffaa]"
+                    className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-[2px] bg-[#0B0F17] border border-white/40 font-mono text-sm text-[#FFFFFF] placeholder:text-[#E2E8F0] focus:outline-none focus:border-[#00ffaa]"
                   />
                   <button
                     type="submit"
                     disabled={busyAdd || searchInput.trim().length < 3}
-                    className="min-h-[44px] px-4 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                    className="min-h-[44px] px-4 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <UserPlus className="w-4 h-4" />
                     <span>{busyAdd ? 'Sending...' : 'Add'}</span>
@@ -277,8 +277,8 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                 <div
                   className={`px-3.5 py-2.5 rounded-[2px] border font-mono text-xs font-semibold ${
                     feedback.type === 'err'
-                      ? 'bg-[#EF4444]/18 border-[#FECACA]/60 text-[#FECACA]'
-                      : 'bg-[#00ffaa]/15 border-[#00ffaa]/60 text-[#00ffaa]'
+                      ? 'bg-[#240A0E] border-[#FCA5A5]/80 text-[#FEE2E2]'
+                      : 'bg-[#04241B] border-[#00ffaa]/75 text-[#A7F3D0]'
                   }`}
                 >
                   {feedback.text}
@@ -286,9 +286,9 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
               )}
 
               {activeLeague && (
-                <div className="px-3.5 py-2 rounded-[2px] bg-[#00ffaa]/14 border border-[#00ffaa]/50 flex items-center justify-between gap-2 font-mono text-[11px] text-[#00ffaa]">
+                <div className="px-3.5 py-2 rounded-[2px] bg-[#04241B] border border-[#00ffaa]/70 flex items-center justify-between gap-2 font-mono text-[11px] text-[#A7F3D0]">
                   <span>League Mode Active: Match requests count toward</span>
-                  <strong className="truncate max-w-[160px]">{activeLeague.name}</strong>
+                  <strong className="truncate max-w-[160px] text-[#FFFFFF]">{activeLeague.name}</strong>
                 </div>
               )}
 
@@ -301,7 +301,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                   {incomingRequests.map((req) => (
                     <div
                       key={req.pairId}
-                      className="bg-[#07090E] border border-[#FEF08A]/60 rounded-[4px] px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3"
+                      className="bg-[#05070B] border border-[#FEF08A]/75 rounded-[4px] px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -316,7 +316,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                             )}
                           />
                         </div>
-                        <div className="font-mono text-[10px] text-[#E2E8F0]">
+                        <div className="font-mono text-[10px] text-[#F8FAFC]">
                           Wants to add you as a rival &amp; friend
                         </div>
                       </div>
@@ -325,7 +325,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                           type="button"
                           disabled={busyPairId === req.pairId}
                           onClick={() => void handleAccept(req)}
-                          className="min-h-[44px] px-3.5 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-xs font-bold uppercase inline-flex items-center gap-1 cursor-pointer"
+                          className="min-h-[44px] px-3.5 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs font-bold uppercase inline-flex items-center gap-1 cursor-pointer"
                         >
                           <Check className="w-3.5 h-3.5" />
                           <span>Accept</span>
@@ -337,7 +337,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                             void handleRemove(req, `Declined request from @${req.friendUsername}.`)
                           }
                           aria-label={`Decline friend request from ${req.friendUsername}`}
-                          className="min-w-[44px] min-h-[44px] px-2.5 py-2 rounded-[2px] bg-[#161922] hover:bg-[#EF4444]/25 border border-white/25 text-[#FFFFFF] font-mono text-xs font-bold uppercase flex items-center justify-center cursor-pointer"
+                          className="min-w-[44px] min-h-[44px] px-2.5 py-2 rounded-[2px] bg-[#141824] hover:bg-[#240A0E] border border-white/35 text-[#FFFFFF] font-mono text-xs font-bold uppercase flex items-center justify-center cursor-pointer"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -350,16 +350,16 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
               {/* Accepted Friends Roster */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#E2E8F0]">
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#FFFFFF]">
                     Friends ({acceptedFriends.length})
                   </span>
-                  <span className="font-mono text-[10px] text-[#CBD5E1]">
+                  <span className="font-mono text-[10px] text-[#F8FAFC]">
                     {wsConnected ? 'Live Presence Active' : 'Connecting Arena...'}
                   </span>
                 </div>
 
                 {acceptedFriends.length === 0 ? (
-                  <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-4 text-xs text-[#E2E8F0] leading-relaxed">
+                  <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-4 text-xs text-[#F8FAFC] leading-relaxed">
                     No friends added yet. Search a shooter’s @username above or tap <strong className="text-[#FFFFFF]">Add Friend</strong> on any PVP post-game summary card.
                   </div>
                 ) : (
@@ -373,7 +373,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                       return (
                         <div
                           key={f.pairId}
-                          className="bg-[#07090E] border border-white/20 rounded-[4px] p-3 flex flex-wrap items-center justify-between gap-3"
+                          className="bg-[#05070B] border border-white/30 rounded-[4px] p-3 flex flex-wrap items-center justify-between gap-3"
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
@@ -402,7 +402,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onCancelMatchInvite(outgoingInvite.inviteId)}
-                                className="min-h-[44px] px-3 py-2 rounded-[2px] bg-[#FEF08A]/18 border border-[#FEF08A]/70 text-[#FEF08A] hover:bg-[#FEF08A]/28 font-mono text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                className="min-h-[44px] px-3 py-2 rounded-[2px] bg-[#1F1804] border border-[#FEF08A]/80 text-[#FEF08A] hover:bg-[#332707] font-mono text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                               >
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>Cancel Request</span>
@@ -416,7 +416,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                                   onClose();
                                 }}
                                 title="Friend is offline — open a Private Room code to share"
-                                className="min-h-[44px] px-3 py-2 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 disabled:opacity-65 text-[#FFFFFF] font-mono text-[11px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap"
+                                className="min-h-[44px] px-3 py-2 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 disabled:bg-[#1A202C] disabled:text-[#F1F5F9] disabled:border-white/20 text-[#FFFFFF] font-mono text-[11px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap"
                               >
                                 Private Room
                               </button>
@@ -432,7 +432,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                                       ? 'Finish or cancel your active request first'
                                       : 'Send 1v1 Match Request'
                                 }
-                                className="min-h-[44px] px-3.5 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                className="min-h-[44px] px-3.5 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                               >
                                 <Swords className="w-3.5 h-3.5" />
                                 <span>Match Request</span>
@@ -447,7 +447,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                               }
                               title={`Unfriend @${f.friendUsername}`}
                               aria-label={`Remove @${f.friendUsername} from friends`}
-                              className="min-w-[44px] min-h-[44px] px-2.5 py-2 rounded-[2px] bg-[#161922] hover:bg-[#EF4444]/25 border border-white/20 text-[#E2E8F0] hover:text-[#FECACA] flex items-center justify-center transition-colors cursor-pointer"
+                              className="min-w-[44px] min-h-[44px] px-2.5 py-2 rounded-[2px] bg-[#141824] hover:bg-[#240A0E] border border-white/30 text-[#FFFFFF] hover:text-[#FEE2E2] flex items-center justify-center transition-colors cursor-pointer"
                             >
                               <UserMinus className="w-4 h-4" />
                             </button>
@@ -462,13 +462,13 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
               {/* Sent Pending Requests */}
               {sentRequests.length > 0 && (
                 <div className="space-y-2">
-                  <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#CBD5E1]">
+                  <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#FFFFFF]">
                     Sent Requests ({sentRequests.length})
                   </div>
                   {sentRequests.map((req) => (
                     <div
                       key={req.pairId}
-                      className="bg-[#07090E] border border-white/20 rounded-[4px] px-3.5 py-2.5 flex items-center justify-between gap-3"
+                      className="bg-[#05070B] border border-white/30 rounded-[4px] px-3.5 py-2.5 flex items-center justify-between gap-3"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -483,7 +483,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                             )}
                           />
                         </div>
-                        <div className="font-mono text-[10px] text-[#CBD5E1]">
+                        <div className="font-mono text-[10px] text-[#F8FAFC]">
                           Awaiting response
                         </div>
                       </div>
@@ -493,7 +493,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
                         onClick={() =>
                           void handleRemove(req, `Cancelled request to @${req.friendUsername}.`)
                         }
-                        className="min-h-[44px] px-3 py-1.5 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer shrink-0"
+                        className="min-h-[44px] px-3 py-1.5 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer shrink-0"
                       >
                         Cancel
                       </button>

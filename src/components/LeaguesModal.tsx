@@ -240,7 +240,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-30 flex items-center justify-center bg-[#07090E]/92 backdrop-blur-sm p-3 sm:p-5"
+      className="fixed inset-0 z-30 flex items-center justify-center bg-[#05070B]/94 backdrop-blur-sm p-3 sm:p-5"
       role="dialog"
       aria-modal="true"
       aria-label="PVP Leagues"
@@ -250,16 +250,16 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 12 }}
         transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-        className="w-full max-w-3xl max-h-[90dvh] flex flex-col bg-[#0F1117] border border-white/25 rounded-[4px] shadow-2xl overflow-hidden"
+        className="w-full max-w-3xl max-h-[90dvh] flex flex-col bg-[#0A0D14] border border-white/35 rounded-[4px] shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/20 shrink-0">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/25 shrink-0">
           <div>
-            <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#6EE7B7]">
+            <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
               <Trophy className="w-3.5 h-3.5" />
               <span>Competitive PVP</span>
             </div>
-            <h2 className="font-display text-2xl sm:text-3xl font-extrabold uppercase tracking-tight text-white leading-none mt-1">
+            <h2 className="font-display text-2xl sm:text-3xl font-extrabold uppercase tracking-tight text-[#FFFFFF] leading-none mt-1">
               PVP Leagues
             </h2>
           </div>
@@ -271,7 +271,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                 onClick={() => void loadLeagues()}
                 disabled={loadingList}
                 title="Refresh leagues"
-                className="w-9 h-9 rounded-[2px] bg-[#161922] hover:bg-[#1E2330] border border-white/25 text-white flex items-center justify-center transition-colors cursor-pointer disabled:opacity-65"
+                className="w-9 h-9 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/30 text-[#FFFFFF] flex items-center justify-center transition-colors cursor-pointer disabled:bg-[#1A202C] disabled:text-[#F1F5F9]"
               >
                 <RefreshCw className={`w-4 h-4 ${loadingList ? 'animate-spin' : ''}`} />
               </button>
@@ -280,7 +280,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Close Leagues Modal"
-              className="w-9 h-9 rounded-[2px] bg-[#161922] hover:bg-[#1E2330] border border-white/25 text-white flex items-center justify-center transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/30 text-[#FFFFFF] flex items-center justify-center transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -290,10 +290,10 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
         {/* Content */}
         {!userProfile ? (
           <div className="p-6 text-center space-y-4">
-            <Trophy className="w-10 h-10 text-[#6EE7B7] mx-auto" />
+            <Trophy className="w-10 h-10 text-[#00ffaa] mx-auto" />
             <div>
-              <h3 className="text-lg font-bold text-white">Sign In to Join PVP Leagues</h3>
-              <p className="text-xs sm:text-sm text-[#E2E8F0] mt-1 max-w-md mx-auto">
+              <h3 className="text-lg font-bold text-[#FFFFFF]">Sign In to Join PVP Leagues</h3>
+              <p className="text-xs sm:text-sm text-[#F8FAFC] mt-1 max-w-md mx-auto">
                 Create private or public leagues, track seasonal standings with friends, and queue directly against league rivals.
               </p>
             </div>
@@ -311,7 +311,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
         ) : (
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
             {/* Navigation Tabs */}
-            <div className="grid grid-cols-3 gap-1 p-1 bg-[#07090E] border border-white/25 rounded-[2px]">
+            <div className="grid grid-cols-3 gap-1 p-1 bg-[#05070B] border border-white/30 rounded-[2px]">
               <button
                 type="button"
                 onClick={() => {
@@ -320,8 +320,8 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                 }}
                 className={`py-2 px-3 rounded-[2px] font-mono text-[11px] font-bold uppercase transition-colors cursor-pointer ${
                   tab === 'MY'
-                    ? 'bg-white text-[#05070B]'
-                    : 'text-[#E2E8F0] hover:text-white hover:bg-white/10'
+                    ? 'bg-[#FFFFFF] text-[#05070B]'
+                    : 'text-[#F8FAFC] hover:text-[#FFFFFF] hover:bg-white/15'
                 }`}
               >
                 My Leagues ({myLeagues.length})
@@ -335,7 +335,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                 className={`py-2 px-3 rounded-[2px] font-mono text-[11px] font-bold uppercase transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                   tab === 'DISCOVER'
                     ? 'bg-[#00ffaa] text-[#05070B]'
-                    : 'text-[#E2E8F0] hover:text-white hover:bg-white/10'
+                    : 'text-[#F8FAFC] hover:text-[#FFFFFF] hover:bg-white/15'
                 }`}
               >
                 <Search className="w-3.5 h-3.5" />
@@ -350,7 +350,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                 className={`py-2 px-3 rounded-[2px] font-mono text-[11px] font-bold uppercase transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                   tab === 'CREATE'
                     ? 'bg-[#00ffaa] text-[#05070B]'
-                    : 'text-[#E2E8F0] hover:text-white hover:bg-white/10'
+                    : 'text-[#F8FAFC] hover:text-[#FFFFFF] hover:bg-white/15'
                 }`}
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -359,13 +359,13 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
             </div>
 
             {errorMsg && (
-              <div className="px-3.5 py-2.5 rounded-[2px] bg-[#EF4444]/18 border border-[#FECACA]/60 text-xs font-semibold text-[#FECACA]">
+              <div className="px-3.5 py-2.5 rounded-[2px] bg-[#240A0E] border border-[#FCA5A5]/75 text-xs font-semibold text-[#FEE2E2]">
                 {errorMsg}
               </div>
             )}
 
             {successMsg && (
-              <div className="px-3.5 py-2.5 rounded-[2px] bg-[#00ffaa]/15 border border-[#00ffaa]/65 text-xs font-semibold text-[#6EE7B7]">
+              <div className="px-3.5 py-2.5 rounded-[2px] bg-[#04241B] border border-[#00ffaa]/75 text-xs font-semibold text-[#A7F3D0]">
                 {successMsg}
               </div>
             )}
@@ -373,12 +373,12 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
             {tab === 'MY' && (
               <div className="space-y-4">
                 {/* Active Queue Scope Banner */}
-                <div className="bg-[#07090E] border border-white/25 rounded-[2px] p-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs">
-                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#CBD5E1] mr-1.5">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#F8FAFC] mr-1.5">
                       PVP Queue:
                     </span>
-                    <span className="font-bold text-white">
+                    <span className="font-bold text-[#FFFFFF]">
                       {activeLeague ? `${activeLeague.name} (${activeLeague.code})` : 'Open Global Arena'}
                     </span>
                   </div>
@@ -386,7 +386,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                     <button
                       type="button"
                       onClick={() => onSelectActiveLeague(null)}
-                      className="px-2.5 py-1 rounded-[2px] bg-[#161922] hover:bg-[#1E2330] border border-white/25 font-mono text-[10px] font-bold uppercase text-white transition-colors cursor-pointer"
+                      className="px-2.5 py-1 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/30 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer"
                     >
                       Switch to Global
                     </button>
@@ -394,18 +394,18 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                 </div>
 
                 {myLeagues.length === 0 ? (
-                  <div className="bg-[#07090E] border border-white/25 rounded-[2px] p-6 text-center space-y-3">
-                    <p className="text-sm font-semibold text-white">
+                  <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-6 text-center space-y-3">
+                    <p className="text-sm font-semibold text-[#FFFFFF]">
                       You aren’t in any PVP leagues yet.
                     </p>
-                    <p className="text-xs text-[#CBD5E1]">
+                    <p className="text-xs text-[#F8FAFC]">
                       Join an open league, enter a 6-character invite code, or create your own league to start tracking standings.
                     </p>
                     <div className="flex items-center justify-center gap-2 pt-1">
                       <button
                         type="button"
                         onClick={() => setTab('DISCOVER')}
-                        className="px-4 py-2 rounded-[2px] bg-white hover:bg-[#E2E8F0] text-[#05070B] font-mono text-xs font-extrabold uppercase cursor-pointer"
+                        className="px-4 py-2 rounded-[2px] bg-[#FFFFFF] hover:bg-[#E2E8F0] text-[#05070B] font-mono text-xs font-extrabold uppercase cursor-pointer"
                       >
                         Browse / Join
                       </button>
@@ -432,30 +432,30 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                             onClick={() => setSelectedLeague(league)}
                             className={`w-full text-left p-3 rounded-[2px] border transition-colors cursor-pointer ${
                               isSelected
-                                ? 'bg-[#161922] border-[#00ffaa]'
-                                : 'bg-[#07090E] border-white/25 hover:border-white/50'
+                                ? 'bg-[#121722] border-[#00ffaa]'
+                                : 'bg-[#05070B] border-white/30 hover:border-white/55'
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-bold text-white truncate">
+                              <span className="text-sm font-bold text-[#FFFFFF] truncate">
                                 {league.name}
                               </span>
                               {league.isPublic ? (
-                                <Globe className="w-3.5 h-3.5 text-[#6EE7B7] shrink-0" />
+                                <Globe className="w-3.5 h-3.5 text-[#00ffaa] shrink-0" />
                               ) : (
                                 <Lock className="w-3.5 h-3.5 text-[#FEF08A] shrink-0" />
                               )}
                             </div>
-                            <div className="flex items-center justify-between gap-2 mt-1 font-mono text-[11px] font-medium text-[#E2E8F0] tabular-nums">
+                            <div className="flex items-center justify-between gap-2 mt-1 font-mono text-[11px] font-medium text-[#F8FAFC] tabular-nums">
                               <span>
                                 {league.memberCount}/{league.maxMembers} Members
                               </span>
-                              <span className="text-[#6EE7B7] font-bold">
+                              <span className="text-[#00ffaa] font-bold">
                                 {league.code}
                               </span>
                             </div>
                             {isActiveQueue && (
-                              <div className="mt-1.5 inline-block px-1.5 py-0.5 rounded-[2px] bg-[#00ffaa]/18 border border-[#00ffaa]/45 font-mono text-[10px] font-bold uppercase text-[#6EE7B7]">
+                              <div className="mt-1.5 inline-block px-1.5 py-0.5 rounded-[2px] bg-[#04241B] border border-[#00ffaa]/75 font-mono text-[10px] font-bold uppercase text-[#A7F3D0]">
                                 Active PVP Queue
                               </div>
                             )}
@@ -465,25 +465,25 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                     </div>
 
                     {/* Right Selected League Standings */}
-                    <div className="md:col-span-3 bg-[#07090E] border border-white/25 rounded-[2px] p-4 space-y-3.5">
+                    <div className="md:col-span-3 bg-[#05070B] border border-white/30 rounded-[2px] p-4 space-y-3.5">
                       {selectedLeague ? (
                         <>
-                          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-white/20 pb-3">
+                          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-white/25 pb-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <h3 className="text-base font-extrabold text-white truncate">
+                                <h3 className="text-base font-extrabold text-[#FFFFFF] truncate">
                                   {selectedLeague.name}
                                 </h3>
-                                <span className="font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-[2px] bg-[#161922] border border-white/20 text-white">
+                                <span className="font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-[2px] bg-[#141824] border border-white/30 text-[#FFFFFF]">
                                   {selectedLeague.isPublic ? 'Public' : 'Private'}
                                 </span>
                               </div>
                               {selectedLeague.description && (
-                                <p className="text-xs text-[#E2E8F0] mt-1">
+                                <p className="text-xs text-[#F8FAFC] mt-1">
                                   {selectedLeague.description}
                                 </p>
                               )}
-                              <div className="font-mono text-[10px] font-medium text-[#CBD5E1] mt-1 flex items-center gap-1.5">
+                              <div className="font-mono text-[10px] font-medium text-[#F8FAFC] mt-1 flex items-center gap-1.5">
                                 <span>Commissioner: @{selectedLeague.ownerName}</span>
                                 <RivalBadgeIcon
                                   rivalry={findRivalryForUsername(
@@ -498,12 +498,12 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                             <button
                               type="button"
                               onClick={() => void handleCopyCode(selectedLeague.code)}
-                              className="px-2.5 py-1.5 rounded-[2px] bg-[#161922] hover:bg-[#1E2330] border border-white/25 flex items-center gap-1.5 text-xs font-mono font-bold text-[#6EE7B7] cursor-pointer shrink-0"
+                              className="px-2.5 py-1.5 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/30 flex items-center gap-1.5 text-xs font-mono font-bold text-[#00ffaa] cursor-pointer shrink-0"
                               title="Copy 6-character invite code"
                             >
                               {copiedCode === selectedLeague.code ? (
                                 <>
-                                  <Check className="w-3.5 h-3.5 text-[#6EE7B7]" />
+                                  <Check className="w-3.5 h-3.5 text-[#00ffaa]" />
                                   <span>Copied</span>
                                 </>
                               ) : (
@@ -517,15 +517,15 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
 
                           {/* Standings Table */}
                           <div>
-                            <div className="text-xs font-bold text-white mb-2 flex items-center justify-between">
+                            <div className="text-xs font-bold text-[#FFFFFF] mb-2 flex items-center justify-between">
                               <span>League Standings</span>
-                              <span className="font-mono text-[10px] font-semibold text-[#CBD5E1]">
+                              <span className="font-mono text-[10px] font-semibold text-[#F8FAFC]">
                                 3 pts Win · 1 pt Draw
                               </span>
                             </div>
 
                             {loadingMembers ? (
-                              <div className="py-6 text-center text-xs text-[#CBD5E1]">
+                              <div className="py-6 text-center text-xs text-[#F8FAFC]">
                                 Loading standings...
                               </div>
                             ) : (
@@ -538,25 +538,25 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                                       key={m.uid}
                                       className={`flex items-center justify-between gap-2 px-3 py-2 rounded-[2px] border text-xs ${
                                         isMe
-                                          ? 'bg-[#161922] border-[#00ffaa]'
-                                          : 'bg-[#0F1117] border-white/20'
+                                          ? 'bg-[#121722] border-[#00ffaa]'
+                                          : 'bg-[#0A0D14] border-white/25'
                                       }`}
                                     >
                                       <div className="flex items-center gap-2 min-w-0">
                                         <span
                                           className={`font-mono font-extrabold w-6 text-center shrink-0 ${
                                             idx === 0
-                                              ? 'text-[#6EE7B7]'
+                                              ? 'text-[#00ffaa]'
                                               : idx === 1
-                                                ? 'text-white'
+                                                ? 'text-[#FFFFFF]'
                                                 : idx === 2
                                                   ? 'text-[#FEF08A]'
-                                                  : 'text-[#CBD5E1]'
+                                                  : 'text-[#F8FAFC]'
                                           }`}
                                         >
                                           #{idx + 1}
                                         </span>
-                                        <span className="font-bold text-white truncate">
+                                        <span className="font-bold text-[#FFFFFF] truncate">
                                           @{m.username}
                                         </span>
                                         {!isMe && (
@@ -569,30 +569,30 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                                           />
                                         )}
                                         {m.role === 'OWNER' && (
-                                          <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-[2px] bg-[#00ffaa]/18 border border-[#00ffaa]/45 text-[#6EE7B7] shrink-0">
+                                          <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-[2px] bg-[#04241B] border border-[#00ffaa]/75 text-[#A7F3D0] shrink-0">
                                             COMMISH
                                           </span>
                                         )}
                                       </div>
 
                                       <div className="flex items-center gap-3 font-mono tabular-nums shrink-0">
-                                        <span className="text-[11px] font-semibold text-[#E2E8F0]">
+                                        <span className="text-[11px] font-semibold text-[#FFFFFF]">
                                           {m.wins}-{m.losses}
                                           {m.draws > 0 ? `-${m.draws}` : ''}
                                         </span>
                                         <span
                                           className={`text-[11px] font-semibold hidden sm:inline ${
                                             diff > 0
-                                              ? 'text-[#6EE7B7]'
+                                              ? 'text-[#00ffaa]'
                                               : diff < 0
-                                                ? 'text-[#FECACA]'
-                                                : 'text-[#CBD5E1]'
+                                                ? 'text-[#FEE2E2]'
+                                                : 'text-[#F8FAFC]'
                                           }`}
                                         >
                                           {diff >= 0 ? '+' : ''}
                                           {diff}
                                         </span>
-                                        <span className="font-bold text-[#6EE7B7] min-w-[42px] text-right">
+                                        <span className="font-bold text-[#00ffaa] min-w-[42px] text-right">
                                           {m.leaguePoints} pt
                                         </span>
                                       </div>
@@ -604,12 +604,12 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                           </div>
 
                           {/* League Actions */}
-                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/20">
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/25">
                             {activeLeague?.id === selectedLeague.id ? (
                               <button
                                 type="button"
                                 onClick={() => onSelectActiveLeague(null)}
-                                className="flex-1 min-w-[180px] min-h-[44px] py-2.5 px-3 rounded-[2px] bg-[#00ffaa]/18 border border-[#00ffaa] text-[#6EE7B7] font-mono text-xs font-bold uppercase text-center cursor-pointer"
+                                className="flex-1 min-w-[180px] min-h-[44px] py-2.5 px-3 rounded-[2px] bg-[#04241B] border border-[#00ffaa] text-[#A7F3D0] font-mono text-xs font-bold uppercase text-center cursor-pointer"
                               >
                                 Active for PVP · Clear
                               </button>
@@ -630,7 +630,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                               type="button"
                               disabled={busyAction}
                               onClick={() => void handleLeaveLeague(selectedLeague)}
-                              className="min-h-[44px] py-2.5 px-3 rounded-[2px] bg-[#161922] hover:bg-[#EF4444]/20 border border-white/25 hover:border-[#FECACA]/65 font-mono text-xs font-bold uppercase text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-65"
+                              className="min-h-[44px] py-2.5 px-3 rounded-[2px] bg-[#141824] hover:bg-[#240A0E] border border-white/30 hover:border-[#FCA5A5]/75 hover:text-[#FEE2E2] font-mono text-xs font-bold uppercase text-[#FFFFFF] flex items-center gap-1.5 transition-colors cursor-pointer disabled:bg-[#1A202C] disabled:text-[#F1F5F9]"
                             >
                               <LogOut className="w-3.5 h-3.5" />
                               <span>
@@ -640,7 +640,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                           </div>
                         </>
                       ) : (
-                        <div className="py-8 text-center text-xs text-[#CBD5E1]">
+                        <div className="py-8 text-center text-xs text-[#F8FAFC]">
                           Select a league on the left to view standings.
                         </div>
                       )}
@@ -655,11 +655,11 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                 {/* Join via 6-character invite code */}
                 <form
                   onSubmit={handleJoinCodeSubmit}
-                  className="bg-[#07090E] border border-white/25 rounded-[2px] p-4 space-y-2.5"
+                  className="bg-[#05070B] border border-white/30 rounded-[2px] p-4 space-y-2.5"
                 >
                   <label
                     htmlFor="league-invite-code"
-                    className="block font-mono text-[11px] uppercase tracking-wider font-bold text-white"
+                    className="block font-mono text-[11px] uppercase tracking-wider font-bold text-[#FFFFFF]"
                   >
                     Join by 6-Character Invite Code
                   </label>
@@ -671,12 +671,12 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                       value={inviteCode}
                       onChange={(ev) => setInviteCode(ev.target.value.toUpperCase())}
                       placeholder="e.g. HOOP42"
-                      className="flex-1 px-3 py-2 rounded-[2px] bg-[#0F1117] border border-white/30 font-mono text-sm uppercase tracking-widest text-white placeholder:text-[#94A3B8] focus:outline-none focus:border-[#00ffaa]"
+                      className="flex-1 px-3 py-2 rounded-[2px] bg-[#0B0F17] border border-white/40 font-mono text-sm uppercase tracking-widest text-[#FFFFFF] placeholder:text-[#E2E8F0] focus:outline-none focus:border-[#00ffaa]"
                     />
                     <button
                       type="submit"
                       disabled={busyAction || inviteCode.trim().length < 6}
-                      className="px-4 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-xs font-extrabold uppercase cursor-pointer whitespace-nowrap"
+                      className="px-4 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs font-extrabold uppercase cursor-pointer whitespace-nowrap"
                     >
                       {busyAction ? 'Joining...' : 'Join Code'}
                     </button>
@@ -685,13 +685,13 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
 
                 {/* Public League Directory */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-wider font-bold text-white">
+                  <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-wider font-bold text-[#FFFFFF]">
                     <span>Public PVP Leagues</span>
-                    <span className="text-[#CBD5E1]">{publicLeagues.length} Listed</span>
+                    <span className="text-[#F8FAFC]">{publicLeagues.length} Listed</span>
                   </div>
 
                   {publicLeagues.length === 0 ? (
-                    <div className="bg-[#07090E] border border-white/25 rounded-[2px] p-5 text-center text-xs text-[#CBD5E1]">
+                    <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-5 text-center text-xs text-[#F8FAFC]">
                       No public leagues yet. Create one in the Create tab to kick off the season!
                     </div>
                   ) : (
@@ -702,28 +702,28 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                         return (
                           <div
                             key={league.id}
-                            className="bg-[#07090E] border border-white/25 rounded-[2px] p-3.5 flex flex-col justify-between gap-2.5"
+                            className="bg-[#05070B] border border-white/30 rounded-[2px] p-3.5 flex flex-col justify-between gap-2.5"
                           >
                             <div>
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-bold text-white truncate">
+                                <span className="text-sm font-bold text-[#FFFFFF] truncate">
                                   {league.name}
                                 </span>
-                                <span className="font-mono text-[11px] font-bold text-[#6EE7B7] shrink-0">
+                                <span className="font-mono text-[11px] font-bold text-[#00ffaa] shrink-0">
                                   {league.code}
                                 </span>
                               </div>
                               {league.description && (
-                                <p className="text-xs text-[#E2E8F0] mt-1 line-clamp-2">
+                                <p className="text-xs text-[#F8FAFC] mt-1 line-clamp-2">
                                   {league.description}
                                 </p>
                               )}
-                              <div className="flex items-center gap-3 mt-2 font-mono text-[11px] text-[#E2E8F0] tabular-nums">
+                              <div className="flex items-center gap-3 mt-2 font-mono text-[11px] text-[#F8FAFC] tabular-nums">
                                 <span className="inline-flex items-center gap-1">
-                                  <Users className="w-3 h-3 text-[#6EE7B7]" />
+                                  <Users className="w-3 h-3 text-[#00ffaa]" />
                                   {league.memberCount}/{league.maxMembers}
                                 </span>
-                                <span className="truncate text-[#CBD5E1] inline-flex items-center gap-1.5">
+                                <span className="truncate text-[#F8FAFC] inline-flex items-center gap-1.5">
                                   <span className="truncate">by @{league.ownerName}</span>
                                   <RivalBadgeIcon
                                     rivalry={findRivalryForUsername(
@@ -744,7 +744,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                                   onSelectActiveLeague(league);
                                   setTab('MY');
                                 }}
-                                className="w-full py-2 rounded-[2px] bg-[#00ffaa]/18 border border-[#00ffaa] text-[#6EE7B7] font-mono text-[11px] font-bold uppercase cursor-pointer"
+                                className="w-full py-2 rounded-[2px] bg-[#04241B] border border-[#00ffaa] text-[#A7F3D0] font-mono text-[11px] font-bold uppercase cursor-pointer"
                               >
                                 Member · View Standings
                               </button>
@@ -753,7 +753,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                                 type="button"
                                 disabled={busyAction || isFull}
                                 onClick={() => void handleJoinPublic(league)}
-                                className="w-full py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-[11px] font-extrabold uppercase cursor-pointer"
+                                className="w-full py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-[11px] font-extrabold uppercase cursor-pointer"
                               >
                                 {isFull ? 'League Full' : 'Join League'}
                               </button>
@@ -770,10 +770,10 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
             {tab === 'CREATE' && (
               <form
                 onSubmit={handleCreateSubmit}
-                className="bg-[#07090E] border border-white/25 rounded-[2px] p-4 sm:p-5 space-y-4"
+                className="bg-[#05070B] border border-white/30 rounded-[2px] p-4 sm:p-5 space-y-4"
               >
                 <div>
-                  <label htmlFor="new-league-name" className="block font-mono text-[11px] uppercase tracking-wider font-bold text-white mb-1.5">
+                  <label htmlFor="new-league-name" className="block font-mono text-[11px] uppercase tracking-wider font-bold text-[#FFFFFF] mb-1.5">
                     League Name
                   </label>
                   <input
@@ -785,12 +785,12 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                     value={newName}
                     onChange={(ev) => setNewName(ev.target.value)}
                     placeholder="e.g. Rucker Park Shooters"
-                    className="w-full px-3.5 py-2.5 rounded-[2px] bg-[#0F1117] border border-white/30 text-sm text-white placeholder:text-[#94A3B8] focus:outline-none focus:border-[#00ffaa]"
+                    className="w-full px-3.5 py-2.5 rounded-[2px] bg-[#0B0F17] border border-white/40 text-sm text-[#FFFFFF] placeholder:text-[#E2E8F0] focus:outline-none focus:border-[#00ffaa]"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="new-league-desc" className="block font-mono text-[11px] uppercase tracking-wider font-bold text-white mb-1.5">
+                  <label htmlFor="new-league-desc" className="block font-mono text-[11px] uppercase tracking-wider font-bold text-[#FFFFFF] mb-1.5">
                     Description (Optional)
                   </label>
                   <input
@@ -800,21 +800,21 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                     value={newDesc}
                     onChange={(ev) => setNewDesc(ev.target.value)}
                     placeholder="Weekly 3-point crown · Best shooter wins"
-                    className="w-full px-3.5 py-2.5 rounded-[2px] bg-[#0F1117] border border-white/30 text-sm text-white placeholder:text-[#94A3B8] focus:outline-none focus:border-[#00ffaa]"
+                    className="w-full px-3.5 py-2.5 rounded-[2px] bg-[#0B0F17] border border-white/40 text-sm text-[#FFFFFF] placeholder:text-[#E2E8F0] focus:outline-none focus:border-[#00ffaa]"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <div className="font-mono text-[11px] uppercase tracking-wider font-bold text-white mb-1.5">
+                    <div className="font-mono text-[11px] uppercase tracking-wider font-bold text-[#FFFFFF] mb-1.5">
                       Visibility
                     </div>
-                    <div className="grid grid-cols-2 gap-1 p-1 bg-[#0F1117] border border-white/25 rounded-[2px]">
+                    <div className="grid grid-cols-2 gap-1 p-1 bg-[#0B0F17] border border-white/30 rounded-[2px]">
                       <button
                         type="button"
                         onClick={() => setNewPublic(true)}
                         className={`py-2 rounded-[2px] font-mono text-[11px] font-bold uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                          newPublic ? 'bg-[#00ffaa] text-[#05070B]' : 'text-[#E2E8F0] hover:text-white'
+                          newPublic ? 'bg-[#00ffaa] text-[#05070B]' : 'text-[#F8FAFC] hover:text-[#FFFFFF]'
                         }`}
                       >
                         <Globe className="w-3.5 h-3.5" />
@@ -824,7 +824,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                         type="button"
                         onClick={() => setNewPublic(false)}
                         className={`py-2 rounded-[2px] font-mono text-[11px] font-bold uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                          !newPublic ? 'bg-white text-[#05070B]' : 'text-[#E2E8F0] hover:text-white'
+                          !newPublic ? 'bg-[#FFFFFF] text-[#05070B]' : 'text-[#F8FAFC] hover:text-[#FFFFFF]'
                         }`}
                       >
                         <Lock className="w-3.5 h-3.5" />
@@ -834,14 +834,14 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                   </div>
 
                   <div>
-                    <label htmlFor="new-league-cap" className="block font-mono text-[11px] uppercase tracking-wider font-bold text-white mb-1.5">
+                    <label htmlFor="new-league-cap" className="block font-mono text-[11px] uppercase tracking-wider font-bold text-[#FFFFFF] mb-1.5">
                       Max Shooters
                     </label>
                     <select
                       id="new-league-cap"
                       value={newMaxMembers}
                       onChange={(ev) => setNewMaxMembers(Number(ev.target.value))}
-                      className="w-full px-3 py-2.5 rounded-[2px] bg-[#0F1117] border border-white/30 font-mono text-sm font-bold text-white focus:outline-none focus:border-[#00ffaa]"
+                      className="w-full px-3 py-2.5 rounded-[2px] bg-[#0B0F17] border border-white/40 font-mono text-sm font-bold text-[#FFFFFF] focus:outline-none focus:border-[#00ffaa]"
                     >
                       <option value={4}>4 Shooters</option>
                       <option value={8}>8 Shooters</option>
@@ -855,7 +855,7 @@ export const LeaguesModal: React.FC<LeaguesModalProps> = ({
                 <button
                   type="submit"
                   disabled={busyAction || newName.trim().length < 3}
-                  className="w-full min-h-[48px] py-3.5 px-4 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-sans text-sm sm:text-base font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
+                  className="w-full min-h-[48px] py-3.5 px-4 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-sans text-sm sm:text-base font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
                 >
                   {busyAction ? 'Creating League...' : 'Create League'}
                 </button>

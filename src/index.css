@@ -11,8 +11,8 @@
   --surface: #0f1117;
   --ink: #ffffff;
   --accent: #00ffaa;
-  --ink-faint: rgba(255, 255, 255, 0.18);
-  --ink-medium: #e2e8f0;
+  --ink-faint: rgba(255, 255, 255, 0.28);
+  --ink-medium: #f8fafc;
 }
 
 ::selection {

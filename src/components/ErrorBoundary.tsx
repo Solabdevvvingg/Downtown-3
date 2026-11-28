@@ -34,12 +34,12 @@ export class ErrorBoundary extends React.Component<
   override render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#07090E] text-white flex items-center justify-center p-6">
-          <div className="w-full max-w-md bg-[#0F1117] border border-white/25 rounded-[4px] p-6 space-y-4 shadow-2xl">
-            <div className="font-display text-2xl font-extrabold uppercase text-[#6EE7B7]">
+        <div className="min-h-screen bg-[#05070B] text-white flex items-center justify-center p-6">
+          <div className="w-full max-w-md bg-[#0A0D14] border border-white/35 rounded-[4px] p-6 space-y-4 shadow-2xl">
+            <div className="font-display text-2xl font-extrabold uppercase text-[#00ffaa]">
               Downtown 3
             </div>
-            <p className="text-sm text-[#E2E8F0] leading-relaxed">{this.state.message}</p>
+            <p className="text-sm text-[#FFFFFF] leading-relaxed">{this.state.message}</p>
             <button
               type="button"
               onClick={() => window.location.reload()}

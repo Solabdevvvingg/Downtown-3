@@ -19,7 +19,7 @@ const CourtMiniPreview: React.FC<{ theme: CourtThemeConfig; locked: boolean }> =
   const { palette } = theme;
   return (
     <div
-      className="relative w-full h-28 rounded-lg overflow-hidden border border-white/10"
+      className="relative w-full h-28 rounded-lg overflow-hidden border border-white/30"
       style={{ backgroundColor: palette.bgStops[1] }}
     >
       <svg
@@ -110,8 +110,8 @@ const CourtMiniPreview: React.FC<{ theme: CourtThemeConfig; locked: boolean }> =
       </svg>
 
       {locked && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#05070B]/60">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#07090E]/95 border border-white/25 text-xs font-semibold text-[#FFFFFF]">
+        <div className="absolute inset-0 flex items-center justify-center bg-[#05070B]/85">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#05070B] border border-[#FDE047]/65 text-xs font-bold text-[#FEF08A]">
             <Lock className="w-3.5 h-3.5 text-[#FEF08A]" />
             <span>Locked</span>
           </div>
@@ -142,7 +142,7 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
 
   return (
     <div
-      className="absolute inset-0 z-30 flex items-center justify-center bg-[#05070B]/90 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:p-6 overflow-y-auto"
+      className="absolute inset-0 z-30 flex items-center justify-center bg-[#05070B]/94 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:p-6 overflow-y-auto"
       onClick={(ev) => {
         if (ev.target === ev.currentTarget) onClose();
       }}
@@ -155,12 +155,12 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="court-locker-title"
-        className="w-full max-w-3xl max-h-[92dvh] overflow-y-auto bg-[#0F1117] border border-white/25 rounded-[4px] p-5 sm:p-7 my-auto shadow-2xl"
+        className="w-full max-w-3xl max-h-[92dvh] overflow-y-auto bg-[#0A0D14] border border-white/35 rounded-[4px] p-5 sm:p-7 my-auto shadow-2xl"
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-white/20 pb-4 mb-5">
+        <div className="flex items-start justify-between gap-4 border-b border-white/25 pb-4 mb-5">
           <div>
-            <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#00ffaa] block mb-1">
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#00ffaa] block mb-1">
               Arena Environments
             </span>
             <h2
@@ -169,7 +169,7 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
             >
               Court Locker
             </h2>
-            <p className="text-xs sm:text-sm text-[#E2E8F0] mt-1 tabular-nums">
+            <p className="text-xs sm:text-sm text-[#F8FAFC] mt-1 tabular-nums">
               {unlockedCount} / {COURT_THEMES.length} Courts Unlocked · Changes court visuals and crowd chant audio
             </p>
           </div>
@@ -177,7 +177,7 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close Court Locker"
-            className="flex items-center justify-center w-10 h-10 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 text-[#FFFFFF] hover:border-[#00ffaa] transition-colors cursor-pointer shrink-0"
+            className="flex items-center justify-center w-10 h-10 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] hover:border-[#00ffaa] transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -195,8 +195,8 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
                 key={theme.id}
                 className={`flex flex-col justify-between gap-3 rounded-[4px] p-4 border transition-colors ${
                   active
-                    ? 'bg-[#161922] border-[#00ffaa]'
-                    : 'bg-[#07090E] border-white/20'
+                    ? 'bg-[#121722] border-[#00ffaa]'
+                    : 'bg-[#05070B] border-white/25'
                 }`}
               >
                 <div className="space-y-3">
@@ -214,20 +214,20 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
                       )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-2 font-mono text-[10px] uppercase tracking-wider text-[#CBD5E1] mt-1">
+                    <div className="flex flex-wrap items-center gap-x-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#F8FAFC] mt-1">
                       <span>{theme.vibeLabel}</span>
                       <span aria-hidden="true">·</span>
                       <span>{theme.chantLabel}</span>
                     </div>
 
-                    <p className="text-xs leading-relaxed text-[#E2E8F0] mt-2">
+                    <p className="text-xs leading-relaxed text-[#F8FAFC] mt-2">
                       {theme.description}
                     </p>
                   </div>
                 </div>
 
                 {/* Footer Controls / Unlock Progress */}
-                <div className="pt-2.5 border-t border-white/20">
+                <div className="pt-2.5 border-t border-white/25">
                   {unlocked ? (
                     <div className="flex items-center gap-2">
                       <button
@@ -247,7 +247,7 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
                         type="button"
                         onClick={() => onPreviewChant(theme.id)}
                         title={`Hear ${theme.name} crowd chant`}
-                        className="min-h-[42px] px-3.5 py-2 rounded-[2px] bg-[#161922] hover:bg-[#222634] border border-white/25 font-mono text-xs font-bold uppercase text-[#FFFFFF] flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                        className="min-h-[42px] px-3.5 py-2 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 font-mono text-xs font-bold uppercase text-[#FFFFFF] flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
                       >
                         <Volume2 className="w-3.5 h-3.5 text-[#00ffaa]" />
                         <span>Chant</span>
@@ -261,7 +261,7 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
                           {Math.round(progress.ratio * 100)}%
                         </span>
                       </div>
-                      <div className="h-1.5 w-full rounded-[1px] bg-white/20 overflow-hidden">
+                      <div className="h-1.5 w-full rounded-[1px] bg-white/25 overflow-hidden">
                         <div
                           className="h-full transition-all duration-300"
                           style={{
@@ -271,7 +271,7 @@ export const CourtLockerModal: React.FC<CourtLockerModalProps> = ({
                         />
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[11px] font-medium text-[#E2E8F0] tabular-nums">
+                        <span className="font-mono text-[11px] font-medium text-[#F8FAFC] tabular-nums">
                           {progress.text}
                         </span>
                         <button

@@ -16,6 +16,7 @@ import { LoadingChecklist, LoadingScreen } from './components/LoadingScreen';
 import { PauseModal } from './components/PauseModal';
 import { PvpIntroOverlay } from './components/PvpIntroOverlay';
 import { findRivalryForUsername, RivalBadgeIcon } from './components/RivalBadgeIcon';
+import { SettingsPage } from './components/SettingsPage';
 import { TitleOverlay } from './components/TitleOverlay';
 import {
   acceptFriendRequest,
@@ -30,7 +31,6 @@ import {
   sendFriendRequestByUsername,
   subscribeToFriendships,
   syncCareerStatsToFirestore,
-  syncCourtRankingToFirestore,
   syncPvpGlobalRankingToFirestore,
   syncRivalryToFirestore,
 } from './firebase';
@@ -54,11 +54,13 @@ import {
   RACKS_COUNT,
   STAMINA_EXHAUSTED_THRESHOLD,
 } from './game/constants';
+import { getBallSkinConfig, isBallSkinUnlocked } from './game/ballSkins';
 import { isCourtUnlocked } from './game/courts';
 import {
-  setHapticsMuted,
+  setHapticIntensity,
   triggerBuzzerHaptic,
   triggerFootstepHaptic,
+  triggerHapticPreview,
   triggerMatchStartHaptic,
   triggerMissHaptic,
   triggerPerfectZoneCueHaptic,
@@ -75,27 +77,41 @@ import { CameraRig } from './game/projection';
 import { OpponentShotEvent, pvpClient } from './game/pvpClient';
 import { renderArena, RenderState } from './game/renderer';
 import {
+  createEmptyCareerStats,
+  loadAudioMuted,
+  loadAudioVolume,
   loadCameraMode,
   loadCareerStats,
   loadGuestName,
+  loadHapticIntensity,
   loadInstantReplayEnabled,
   loadLastHighlight,
   loadLastVisitAt,
   loadRivalries,
+  loadSelectedBallSkin,
   loadSelectedCourt,
+  loadShotSensitivity,
+  loadShotTrajectoryEnabled,
   LONG_AWAY_THRESHOLD_MS,
   normalizeOpponentKey,
+  saveAudioMuted,
+  saveAudioVolume,
   saveCameraMode,
   saveCareerStats,
   saveGuestName,
+  saveHapticIntensity,
   saveInstantReplayEnabled,
   saveLastHighlight,
   saveLastVisitAt,
   saveRivalries,
+  saveSelectedBallSkin,
   saveSelectedCourt,
+  saveShotSensitivity,
+  saveShotTrajectoryEnabled,
 } from './game/storage';
 import {
   ActiveBall,
+  BallSkinId,
   BallSlotRecord,
   CameraMode,
   CareerStats,
@@ -109,6 +125,7 @@ import {
   FriendshipRecord,
   GameMode,
   GamePhase,
+  HapticIntensity,
   HudSnapshot,
   MatchInvitePayload,
   Particle,
@@ -118,6 +135,7 @@ import {
   RivalryRecord,
   ShooterAnimState,
   ShotChartEntry,
+  ShotTrajectoryArc,
   TimingBreakdown,
   TimingQuality,
   UserProfile,
@@ -252,6 +270,7 @@ interface EngineState {
   windVec: { x: number; y: number };
   windShiftTimer: number;
   courtTheme: CourtThemeId;
+  ballSkin: BallSkinId;
   shooterDisplayName: string;
   bestContestHighlight: ContestHighlight | null;
   lastHighlight: ContestHighlight | null;
@@ -263,6 +282,10 @@ interface EngineState {
   leagueResultRecorded: boolean;
   instantReplayEnabled: boolean;
   cameraMode: CameraMode;
+  shotTrajectoryEnabled: boolean;
+  shotSensitivity: number;
+  hapticIntensity: HapticIntensity;
+  lastShotTrajectory: ShotTrajectoryArc | null;
   perfectZoneHapticFired: boolean;
   sessionBestScore: number;
   sessionBestStreak: number;
@@ -419,6 +442,7 @@ function buildHighlightFromBall(e: EngineState, ball: ActiveBall): ContestHighli
     id: ball.id,
     mode: e.mode,
     courtTheme: e.courtTheme,
+    ballSkin: ball.ballSkin ?? e.ballSkin,
     rackIndex: ball.rackIndex,
     rackLabel: rackCfg?.label ?? `Rack ${ball.rackIndex + 1}`,
     ballIndex: ball.ballIndex,
@@ -557,6 +581,7 @@ function buildHudSnapshot(e: EngineState): HudSnapshot {
       rating,
     },
     courtTheme: e.courtTheme,
+    ballSkin: e.ballSkin,
     contestHighlight: e.bestContestHighlight,
     lastHighlight: e.lastHighlight,
     rivalries: Object.values(e.rivalries).sort((a, b) => b.lastPlayedAt - a.lastPlayedAt),
@@ -585,6 +610,10 @@ function buildHudSnapshot(e: EngineState): HudSnapshot {
     instantReplayHeadline: null,
     instantReplayPoints: 0,
     cameraMode: e.cameraMode,
+    shotTrajectoryEnabled: e.shotTrajectoryEnabled,
+    audioVolume: soundEngine.getVolume(),
+    shotSensitivity: e.shotSensitivity,
+    hapticIntensity: e.hapticIntensity,
   };
 }
 
@@ -600,10 +629,21 @@ export default function App() {
       return isCourtUnlocked(saved, initialCareer.current) ? saved : 'wooden_gym';
     })()
   );
+  const initialBallSkin = useRef<BallSkinId>(
+    (() => {
+      const saved = loadSelectedBallSkin();
+      return isBallSkinUnlocked(saved, initialCareer.current) ? saved : 'classic_leather';
+    })()
+  );
 
   const initialGuestName = useRef<string>(loadGuestName());
   const initialInstantReplay = useRef<boolean>(loadInstantReplayEnabled());
   const initialCameraMode = useRef<CameraMode>(loadCameraMode());
+  const initialShotTrajectory = useRef<boolean>(loadShotTrajectoryEnabled());
+  const initialAudioVolume = useRef<number>(loadAudioVolume());
+  const initialAudioMuted = useRef<boolean>(loadAudioMuted());
+  const initialShotSensitivity = useRef<number>(loadShotSensitivity());
+  const initialHapticIntensity = useRef<HapticIntensity>(loadHapticIntensity());
   const initialVisitReasonRef = useRef<'FIRST_VISIT' | 'LONG_AWAY' | null>(
     (() => {
       const last = loadLastVisitAt();
@@ -651,6 +691,8 @@ export default function App() {
   const showLeaguesModalRef = useRef(false);
   const [showFriendsModal, setShowFriendsModal] = useState(false);
   const showFriendsModalRef = useRef(false);
+  const [showSettingsPage, setShowSettingsPage] = useState(false);
+  const showSettingsPageRef = useRef(false);
   const [friendships, setFriendships] = useState<FriendshipRecord[]>([]);
   const [friendStatuses, setFriendStatuses] = useState<Record<string, FriendPresence>>({});
   const [incomingInvite, setIncomingInvite] = useState<MatchInvitePayload | null>(null);
@@ -668,7 +710,7 @@ export default function App() {
   }>({ leagueId: null, leagueName: null });
   const [activeHighlight, setActiveHighlight] = useState<ContestHighlight | null>(null);
   const activeHighlightRef = useRef<ContestHighlight | null>(null);
-  const [courtRankingsRefreshNonce, setCourtRankingsRefreshNonce] = useState(0);
+  const [globalRankingsRefreshNonce, setGlobalRankingsRefreshNonce] = useState(0);
   const initialAuthCheckDoneRef = useRef(false);
   const [lobbyStats, setLobbyStats] = useState<PvpLobbyStats>({
     onlinePlayers: 1,
@@ -721,12 +763,21 @@ export default function App() {
   }, [showFriendsModal]);
 
   useEffect(() => {
+    showSettingsPageRef.current = showSettingsPage;
+  }, [showSettingsPage]);
+
+  useEffect(() => {
     activeHighlightRef.current = activeHighlight;
   }, [activeHighlight]);
 
   useEffect(() => {
     soundEngine.setCourtTheme(initialCourt.current);
-    setHapticsMuted(soundEngine.isMuted());
+    soundEngine.setVolume(initialAudioVolume.current);
+    if (initialAudioMuted.current) {
+      soundEngine.setMuted(true);
+    }
+    setHapticIntensity(initialHapticIntensity.current);
+    setHud(buildHudSnapshot(engineRef.current));
   }, []);
 
   useEffect(() => {
@@ -847,6 +898,7 @@ export default function App() {
     windVec: { x: 0.018, y: 0.004 },
     windShiftTimer: 6.0,
     courtTheme: initialCourt.current,
+    ballSkin: initialBallSkin.current,
     shooterDisplayName: initialGuestName.current,
     bestContestHighlight: null,
     lastHighlight: initialHighlight.current,
@@ -858,12 +910,22 @@ export default function App() {
     leagueResultRecorded: false,
     instantReplayEnabled: initialInstantReplay.current,
     cameraMode: initialCameraMode.current,
+    shotTrajectoryEnabled: initialShotTrajectory.current,
+    shotSensitivity: initialShotSensitivity.current,
+    hapticIntensity: initialHapticIntensity.current,
+    lastShotTrajectory: null,
     perfectZoneHapticFired: false,
     sessionBestScore: 0,
     sessionBestStreak: 0,
   });
 
   const [hud, setHud] = useState<HudSnapshot>(() => buildHudSnapshot(engineRef.current));
+
+  useEffect(() => {
+    if (hud.phase !== 'TITLE' && showSettingsPageRef.current) {
+      setShowSettingsPage(false);
+    }
+  }, [hud.phase]);
 
   const syncHud = useCallback(() => {
     const e = engineRef.current;
@@ -1315,6 +1377,7 @@ export default function App() {
     e.fastBreakRackCumulativesMs = new Array(RACKS_COUNT).fill(null);
     e.fastBreakIsNewBest = false;
     e.leagueResultRecorded = false;
+    e.lastShotTrajectory = null;
     e.perfectZoneHapticFired = false;
 
     e.pvpIntroElapsed = 0;
@@ -1352,13 +1415,24 @@ export default function App() {
     e: EngineState,
     origin: Vec3,
     count: number,
-    color: string,
-    speed = 7.5
+    color: string | string[],
+    speed = 7.5,
+    options?: {
+      shape?: Particle['shape'];
+      glowColor?: string;
+      gravity?: number;
+      drag?: number;
+      sizeScale?: number;
+    }
   ) => {
+    const palette = Array.isArray(color) ? color : [color];
+    const shape = options?.shape ?? 'circle';
+    const sizeScale = options?.sizeScale ?? 1;
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const up = 0.25 + Math.random() * 0.9;
       const sp = speed * (0.45 + Math.random() * 0.75);
+      const picked = palette[Math.floor(Math.random() * palette.length)];
       e.particles.push({
         x: origin.x + (Math.random() - 0.5) * 0.4,
         y: origin.y + (Math.random() - 0.5) * 0.4,
@@ -1368,8 +1442,15 @@ export default function App() {
         vz: up * sp,
         life: 0.45 + Math.random() * 0.35,
         maxLife: 0.8,
-        size: 0.8 + Math.random() * 0.9,
-        color,
+        size: (0.8 + Math.random() * 0.9) * sizeScale,
+        color: picked,
+        glowColor: options?.glowColor,
+        shape,
+        gravity: options?.gravity,
+        drag: options?.drag,
+        rot: shape === 'confetti' || shape === 'spark' ? Math.random() * Math.PI * 2 : undefined,
+        rotSpeed: shape === 'confetti' ? (Math.random() - 0.5) * 14 : undefined,
+        aspect: shape === 'confetti' ? 0.45 + Math.random() * 0.45 : undefined,
       });
     }
   };
@@ -1388,18 +1469,35 @@ export default function App() {
     );
     if (segLen < 0.01) return;
 
+    const skinCfg = getBallSkinConfig(ball.ballSkin ?? e.ballSkin);
     const palette =
-      shotStreak >= 9
-        ? ['#FEF08A', '#FDE047', '#F59E0B', '#FB923C']
-        : shotStreak >= 6
-          ? ['#FDE68A', '#F59E0B', '#FBBF24', '#F9631C']
-          : ball.isMoney
-            ? ['#FDE68A', '#F59E0B', '#FB923C']
-            : ['#FDBA74', '#F9631C', '#FB923C'];
+      skinCfg.alwaysTrail
+        ? skinCfg.palette.trailParticles
+        : shotStreak >= 9
+          ? ['#FEF08A', '#FDE047', '#F59E0B', '#FB923C']
+          : shotStreak >= 6
+            ? ['#FDE68A', '#F59E0B', '#FBBF24', '#F9631C']
+            : ball.isMoney
+              ? ['#FDE68A', '#F59E0B', '#FB923C']
+              : ['#FDBA74', '#F9631C', '#FB923C'];
 
-    const glowColor = shotStreak >= 6 || ball.isMoney ? '#F59E0B' : '#F9631C';
-    const baseLife = shotStreak >= 9 ? 1.25 : shotStreak >= 6 ? 1.08 : 0.9;
-    const count = Math.min(4, Math.max(1, Math.round(dt * (shotStreak >= 6 ? 130 : 95))));
+    const glowColor = skinCfg.alwaysTrail
+      ? skinCfg.palette.glowHex
+      : shotStreak >= 6 || ball.isMoney
+        ? '#F59E0B'
+        : '#F9631C';
+    const shape = skinCfg.alwaysTrail ? skinCfg.palette.trailParticleShape : 'circle';
+    const baseLife = skinCfg.alwaysTrail
+      ? shotStreak >= 6
+        ? 1.1
+        : 0.86
+      : shotStreak >= 9
+        ? 1.25
+        : shotStreak >= 6
+          ? 1.08
+          : 0.9;
+    const rate = skinCfg.alwaysTrail ? (shotStreak >= 6 ? 135 : 95) : shotStreak >= 6 ? 130 : 95;
+    const count = Math.min(4, Math.max(1, Math.round(dt * rate)));
 
     // Keep total active particles bounded for smooth frame pacing
     while (e.particles.length + count > 420) {
@@ -1415,19 +1513,24 @@ export default function App() {
       const t = (i + 0.35 + Math.random() * 0.3) / (count + 0.3);
       const life = baseLife * (0.85 + Math.random() * 0.25);
       const color = palette[Math.floor(Math.random() * palette.length)];
+      const spreadVel = skinCfg.trailStyle === 'electric' ? 1.5 : 0.45;
+      const liftVel = skinCfg.trailStyle === 'flame' ? 0.55 + Math.random() * 0.85 : 0.2 + Math.random() * 0.45;
       e.particles.push({
-        x: prevPos.x + (ball.pos.x - prevPos.x) * t + (Math.random() - 0.5) * 0.1,
-        y: prevPos.y + (ball.pos.y - prevPos.y) * t + (Math.random() - 0.5) * 0.1,
-        z: prevPos.z + (ball.pos.z - prevPos.z) * t + (Math.random() - 0.5) * 0.09,
-        vx: (Math.random() - 0.5) * 0.45,
-        vy: (Math.random() - 0.5) * 0.45,
-        vz: 0.2 + Math.random() * 0.45,
+        x: prevPos.x + (ball.pos.x - prevPos.x) * t + (Math.random() - 0.5) * 0.12,
+        y: prevPos.y + (ball.pos.y - prevPos.y) * t + (Math.random() - 0.5) * 0.12,
+        z: prevPos.z + (ball.pos.z - prevPos.z) * t + (Math.random() - 0.5) * 0.1,
+        vx: (Math.random() - 0.5) * spreadVel,
+        vy: (Math.random() - 0.5) * spreadVel,
+        vz: liftVel,
         life,
         maxLife: life,
-        size: (shotStreak >= 6 ? 1.05 : 0.85) + Math.random() * 0.6,
+        size: (shotStreak >= 6 ? 1.08 : 0.88) + Math.random() * 0.58,
         color,
         glowColor,
-        gravity: 0.45,
+        shape,
+        rot: shape !== 'circle' ? Math.random() * Math.PI * 2 : undefined,
+        rotSpeed: shape === 'confetti' ? (Math.random() - 0.5) * 10 : undefined,
+        gravity: skinCfg.trailStyle === 'flame' ? -0.35 : 0.45,
         isTrail: true,
       });
     }
@@ -1827,28 +1930,18 @@ export default function App() {
                   : match.winnerId === e.myPlayerId
                     ? 'WIN'
                     : 'LOSS';
-                void Promise.all([
-                  syncCourtRankingToFirestore(
-                    userProfileRef.current.uid,
-                    userProfileRef.current.username,
-                    e.courtTheme,
-                    finalScore,
-                    contestBestStreak,
-                    swishTotal
-                  ),
-                  syncPvpGlobalRankingToFirestore(
-                    userProfileRef.current.uid,
-                    userProfileRef.current.username,
-                    e.courtTheme,
-                    finalScore,
-                    contestBestStreak,
-                    swishTotal,
-                    pvpResult
-                  ),
-                ])
-                  .then(() => setCourtRankingsRefreshNonce((n) => n + 1))
+                void syncPvpGlobalRankingToFirestore(
+                  userProfileRef.current.uid,
+                  userProfileRef.current.username,
+                  e.courtTheme,
+                  finalScore,
+                  contestBestStreak,
+                  swishTotal,
+                  pvpResult
+                )
+                  .then(() => setGlobalRankingsRefreshNonce((n) => n + 1))
                   .catch((err: unknown) => {
-                    console.error('Failed to sync PVP rankings:', err);
+                    console.error('Failed to sync PVP global ranking:', err);
                   });
               }
               pvpClient.setProfile(
@@ -1976,20 +2069,57 @@ export default function App() {
         buildServerProfileStats(e.career)
       );
       syncHud();
-      setCourtRankingsRefreshNonce((n) => n + 1);
+      setGlobalRankingsRefreshNonce((n) => n + 1);
     },
     [syncHud]
   );
 
   const handleToggleMute = useCallback(() => {
     const nextMuted = !soundEngine.isMuted();
+    soundEngine.setMuted(nextMuted);
+    saveAudioMuted(soundEngine.isMuted());
+    saveAudioVolume(soundEngine.getStoredVolume());
     if (!nextMuted) {
       soundEngine.unlock();
+      soundEngine.playVolumePreviewTone();
     }
-    soundEngine.setMuted(nextMuted);
-    setHapticsMuted(nextMuted);
     syncHud();
   }, [syncHud]);
+
+  const handleChangeAudioVolume = useCallback(
+    (volume: number) => {
+      soundEngine.setVolume(volume);
+      saveAudioVolume(soundEngine.getStoredVolume());
+      saveAudioMuted(soundEngine.isMuted());
+      if (!soundEngine.isMuted()) {
+        soundEngine.unlock();
+        soundEngine.playVolumePreviewTone();
+      }
+      syncHud();
+    },
+    [syncHud]
+  );
+
+  const handleChangeShotSensitivity = useCallback(
+    (sensitivity: number) => {
+      const clamped = Math.max(0.6, Math.min(1.5, Math.round(sensitivity * 20) / 20));
+      engineRef.current.shotSensitivity = clamped;
+      saveShotSensitivity(clamped);
+      syncHud();
+    },
+    [syncHud]
+  );
+
+  const handleChangeHapticIntensity = useCallback(
+    (intensity: HapticIntensity) => {
+      engineRef.current.hapticIntensity = intensity;
+      setHapticIntensity(intensity);
+      saveHapticIntensity(intensity);
+      triggerHapticPreview(intensity);
+      syncHud();
+    },
+    [syncHud]
+  );
 
   const handleSelectCourt = useCallback(
     (theme: CourtThemeId) => {
@@ -2009,6 +2139,19 @@ export default function App() {
     soundEngine.unlock();
     soundEngine.playCourtPreviewChant(theme);
   }, []);
+
+  const handleSelectBallSkin = useCallback(
+    (skin: BallSkinId) => {
+      const e = engineRef.current;
+      if (!isBallSkinUnlocked(skin, e.career)) return;
+      e.ballSkin = skin;
+      saveSelectedBallSkin(skin);
+      soundEngine.unlock();
+      soundEngine.playTick(false);
+      syncHud();
+    },
+    [syncHud]
+  );
 
   const handlePause = useCallback(() => {
     const e = engineRef.current;
@@ -2031,24 +2174,90 @@ export default function App() {
     syncHud();
   }, [syncHud]);
 
+  const handleSetCameraMode = useCallback(
+    (nextMode: CameraMode) => {
+      const e = engineRef.current;
+      e.cameraMode = nextMode;
+      saveCameraMode(nextMode);
+      e.cameraSnapZoom = 0;
+      const activeRack = RACK_CONFIGS[Math.min(e.currentRack, RACKS_COUNT - 1)];
+      if (activeRack && e.phase !== 'TITLE') {
+        const hoopDelta = {
+          x: e.hoopPos.x - HOOP_POS.x,
+          y: e.hoopPos.y - HOOP_POS.y,
+          z: e.hoopPos.z - HOOP_POS.z,
+        };
+        const rig = computeRackCameraRig(activeRack, nextMode, hoopDelta);
+        e.camera.pos = { ...rig.pos };
+        e.camera.target = { ...rig.target };
+        e.camera.focalLength = rig.focalLength;
+      }
+      syncHud();
+    },
+    [syncHud]
+  );
+
   const handleToggleCameraMode = useCallback(() => {
+    const nextMode: CameraMode =
+      engineRef.current.cameraMode === 'PRO_STATIC' ? 'FOLLOW' : 'PRO_STATIC';
+    handleSetCameraMode(nextMode);
+  }, [handleSetCameraMode]);
+
+  const handleToggleShotTrajectory = useCallback(() => {
     const e = engineRef.current;
-    const nextMode: CameraMode = e.cameraMode === 'PRO_STATIC' ? 'FOLLOW' : 'PRO_STATIC';
-    e.cameraMode = nextMode;
-    saveCameraMode(nextMode);
-    e.cameraSnapZoom = 0;
-    const activeRack = RACK_CONFIGS[Math.min(e.currentRack, RACKS_COUNT - 1)];
-    if (activeRack && e.phase !== 'TITLE') {
-      const hoopDelta = {
-        x: e.hoopPos.x - HOOP_POS.x,
-        y: e.hoopPos.y - HOOP_POS.y,
-        z: e.hoopPos.z - HOOP_POS.z,
-      };
-      const rig = computeRackCameraRig(activeRack, nextMode, hoopDelta);
-      e.camera.pos = { ...rig.pos };
-      e.camera.target = { ...rig.target };
-      e.camera.focalLength = rig.focalLength;
+    e.shotTrajectoryEnabled = !e.shotTrajectoryEnabled;
+    saveShotTrajectoryEnabled(e.shotTrajectoryEnabled);
+    syncHud();
+  }, [syncHud]);
+
+  const handleResetSettingsToDefaults = useCallback(() => {
+    const e = engineRef.current;
+    soundEngine.setVolume(100);
+    soundEngine.setMuted(false);
+    saveAudioVolume(100);
+    saveAudioMuted(false);
+
+    e.shotSensitivity = 1.0;
+    saveShotSensitivity(1.0);
+
+    e.hapticIntensity = 'MEDIUM';
+    setHapticIntensity('MEDIUM');
+    saveHapticIntensity('MEDIUM');
+
+    e.cameraMode = 'FOLLOW';
+    saveCameraMode('FOLLOW');
+
+    e.shotTrajectoryEnabled = false;
+    saveShotTrajectoryEnabled(false);
+
+    e.instantReplayEnabled = true;
+    saveInstantReplayEnabled(true);
+
+    e.ballSkin = 'classic_leather';
+    saveSelectedBallSkin('classic_leather');
+
+    syncHud();
+  }, [syncHud]);
+
+  const handleClearLocalProgress = useCallback(() => {
+    const e = engineRef.current;
+    const empty = createEmptyCareerStats();
+    e.career = empty;
+    e.contestStartCareer = { ...empty };
+    e.bestScore = 0;
+    e.streakRecordBaseline = 2;
+    e.sessionBestScore = 0;
+    e.sessionBestStreak = 0;
+    e.rivalries = {};
+    e.lastHighlight = null;
+    e.bestContestHighlight = null;
+    if (!isBallSkinUnlocked(e.ballSkin, empty)) {
+      e.ballSkin = 'classic_leather';
+      saveSelectedBallSkin('classic_leather');
     }
+    saveCareerStats(empty);
+    saveRivalries({});
+    saveLastHighlight(null);
     syncHud();
   }, [syncHud]);
 
@@ -2072,6 +2281,7 @@ export default function App() {
     e.hoopPos = { ...HOOP_POS };
     e.hoopTargetPos = { ...HOOP_POS };
     e.activeBalls = [];
+    e.lastShotTrajectory = null;
     e.particles = [];
     e.callouts = [];
     e.ballsRecord = createInitialBallsRecord(e.moneyRack);
@@ -2255,6 +2465,7 @@ export default function App() {
         e.mode !== 'PRACTICE' &&
         e.mode !== 'FAST_BREAK' &&
         e.timeLeft <= 0.35,
+      ballSkin: e.ballSkin,
       skipRimCollision: launch.skipRimCollision,
       pos: releasePos,
       vel: launch.vel,
@@ -2277,6 +2488,32 @@ export default function App() {
       age: 0,
     };
     e.activeBalls.push(ball);
+    const releaseSkinCfg = getBallSkinConfig(e.ballSkin);
+    if (releaseSkinCfg.alwaysTrail) {
+      spawnParticles(
+        e,
+        releasePos,
+        8,
+        releaseSkinCfg.palette.releaseBurstColors,
+        5.8,
+        {
+          shape: releaseSkinCfg.palette.releaseBurstShape,
+          glowColor: releaseSkinCfg.palette.glowHex,
+          gravity: releaseSkinCfg.trailStyle === 'flame' ? 4.5 : 14,
+        }
+      );
+    }
+    e.lastShotTrajectory = {
+      ballId,
+      points: [{ ...releasePos }],
+      hoopPos: { ...e.hoopPos },
+      timingQuality: recordedTiming,
+      isMoney: slot.isMoney,
+      outcome: null,
+      age: 0,
+      fadeAfter: 2.7,
+      frozen: false,
+    };
     e.shotChart.push({
       id: ballId,
       rackIndex: e.currentRack,
@@ -2425,6 +2662,17 @@ export default function App() {
 
       if (ev.code === 'Escape' || ev.code === 'KeyP') {
         if (
+          ev.code === 'Escape' &&
+          showSettingsPageRef.current &&
+          !showAuthOverlayRef.current &&
+          !showEditUsernameRef.current &&
+          !showCourtLockerRef.current
+        ) {
+          ev.preventDefault();
+          setShowSettingsPage(false);
+          return;
+        }
+        if (
           isLocalMode &&
           (e.phase === 'PLAYING' || e.phase === 'COUNTDOWN' || e.phase === 'PAUSED')
         ) {
@@ -2440,6 +2688,7 @@ export default function App() {
         !showCourtLockerRef.current &&
         !showLeaguesModalRef.current &&
         !showFriendsModalRef.current &&
+        !showSettingsPageRef.current &&
         !activeHighlightRef.current &&
         e.phase === 'TITLE' &&
         isLocalMode &&
@@ -3123,7 +3372,7 @@ export default function App() {
                 e.mode === 'PRACTICE'
                   ? DIFFICULTY_TIERS[0]
                   : getEffectiveDifficulty(getDifficultyForStreak(e.streak), e.stamina);
-              e.meterValue += diff.meterSpeed * dt;
+              e.meterValue += diff.meterSpeed * e.shotSensitivity * dt;
               e.gatherAmount = Math.min(1, e.meterValue / METER_PERFECT_CENTER);
               const perfStart = METER_PERFECT_CENTER - diff.perfectHalfWindow;
               const perfEnd = METER_PERFECT_CENTER + diff.perfectHalfWindow;
@@ -3175,6 +3424,20 @@ export default function App() {
                   triggerRimHitHaptic(impact);
                   e.rimShake = Math.min(1, e.rimShake + (b.rimHang ? 0.35 : 0.65));
                   e.screenShake = Math.min(0.45, e.screenShake + (b.rimHang ? 0.06 : 0.14));
+                  const rimSkinCfg = getBallSkinConfig(b.ballSkin ?? e.ballSkin);
+                  if (rimSkinCfg.alwaysTrail && impact >= 3.2) {
+                    spawnParticles(
+                      e,
+                      { x: b.pos.x, y: b.pos.y, z: b.pos.z },
+                      6,
+                      rimSkinCfg.palette.rimSparkColors,
+                      5.4,
+                      {
+                        shape: 'spark',
+                        glowColor: rimSkinCfg.palette.glowHex,
+                      }
+                    );
+                  }
                 },
                 onRimHangStart: (b) => {
                   if (b.isRemote) return;
@@ -3279,12 +3542,25 @@ export default function App() {
                       b.isBuzzerBeater
                     );
                   }
+                  const scoreSkinCfg = getBallSkinConfig(b.ballSkin ?? e.ballSkin);
                   spawnParticles(
                     e,
                     { x: e.hoopPos.x, y: e.hoopPos.y, z: e.hoopPos.z - 0.5 },
-                    b.isMoney ? 22 : 14,
-                    b.isMoney ? '#F59E0B' : isCleanSwish ? '#34D399' : '#F9631C',
-                    b.isMoney ? 9.2 : 7.0
+                    b.isMoney ? 22 : scoreSkinCfg.alwaysTrail ? 18 : 14,
+                    scoreSkinCfg.alwaysTrail
+                      ? scoreSkinCfg.palette.scoreBurstColors
+                      : b.isMoney
+                        ? '#F59E0B'
+                        : isCleanSwish
+                          ? '#34D399'
+                          : '#F9631C',
+                    b.isMoney ? 9.2 : 7.4,
+                    scoreSkinCfg.alwaysTrail
+                      ? {
+                          shape: scoreSkinCfg.palette.releaseBurstShape,
+                          glowColor: scoreSkinCfg.palette.glowHex,
+                        }
+                      : undefined
                   );
 
                   const label = b.isBuzzerBeater
@@ -3341,6 +3617,10 @@ export default function App() {
                     isCleanSwish,
                     priorityScore,
                   };
+                  if (e.lastShotTrajectory && e.lastShotTrajectory.ballId === b.id) {
+                    e.lastShotTrajectory.outcome = 'MADE';
+                    e.lastShotTrajectory.hoopPos = { ...e.hoopPos };
+                  }
 
                   syncHud();
                 },
@@ -3413,9 +3693,39 @@ export default function App() {
                       true
                     );
                   }
+                  if (e.lastShotTrajectory && e.lastShotTrajectory.ballId === b.id) {
+                    e.lastShotTrajectory.outcome = 'MISSED';
+                    e.lastShotTrajectory.hoopPos = { ...e.hoopPos };
+                  }
                   syncHud();
                 },
               }, e.windVec, e.hoopPos);
+
+              if (!ball.isRemote && e.lastShotTrajectory && e.lastShotTrajectory.ballId === ball.id && !e.lastShotTrajectory.frozen) {
+                const arc = e.lastShotTrajectory;
+                if (!arc.rimCrossPoint && prevPos.z >= e.hoopPos.z && ball.pos.z <= e.hoopPos.z && ball.vel.z < 0) {
+                  const dzSpan = prevPos.z - ball.pos.z;
+                  const tCross = dzSpan > 0.0001 ? (prevPos.z - e.hoopPos.z) / dzSpan : 0.5;
+                  const crossPt: Vec3 = {
+                    x: prevPos.x + (ball.pos.x - prevPos.x) * tCross,
+                    y: prevPos.y + (ball.pos.y - prevPos.y) * tCross,
+                    z: e.hoopPos.z,
+                  };
+                  arc.rimCrossPoint = crossPt;
+                  arc.points.push(crossPt);
+                }
+                const lastPt = arc.points[arc.points.length - 1];
+                if (!lastPt || Math.hypot(ball.pos.x - lastPt.x, ball.pos.y - lastPt.y, ball.pos.z - lastPt.z) >= 0.55) {
+                  arc.points.push({ ...ball.pos });
+                }
+                if (
+                  (ball.hasScored && ball.pos.z < e.hoopPos.z - 1.1) ||
+                  (ball.hasResolved && !ball.hasScored && (ball.pos.z < e.hoopPos.z - 1.4 || ball.pos.z <= 0.65)) ||
+                  ball.age >= 2.2
+                ) {
+                  arc.frozen = true;
+                }
+              }
 
               if (!ball.isRemote && ball.highlightFrames && ball.age <= 3.6) {
                 ball.highlightFrames.push({
@@ -3441,9 +3751,17 @@ export default function App() {
               if (!ball.isRemote && !wasResolved && (ball.age < 1.85 || Boolean(ball.rimHang))) {
                 const shotStreak =
                   ball.streakAtRelease ?? Math.max(0, ball.multiplierAtRelease - 1);
-                if (shotStreak >= 3) {
+                const ballSkinCfg = getBallSkinConfig(ball.ballSkin ?? e.ballSkin);
+                if (shotStreak >= 3 || ballSkinCfg.alwaysTrail) {
                   spawnBallTrailParticles(e, ball, prevPos, dt, shotStreak);
                 }
+              }
+            }
+
+            if (e.lastShotTrajectory) {
+              e.lastShotTrajectory.age += dt;
+              if (e.lastShotTrajectory.age >= e.lastShotTrajectory.fadeAfter) {
+                e.lastShotTrajectory = null;
               }
             }
 
@@ -3468,20 +3786,6 @@ export default function App() {
                     e.career.totalBestStreakSum += e.bestStreak;
                     e.career.streakTrackedContests += 1;
                     persistCareer(e.career);
-                    if (userProfileRef.current) {
-                      void syncCourtRankingToFirestore(
-                        userProfileRef.current.uid,
-                        userProfileRef.current.username,
-                        e.courtTheme,
-                        e.score,
-                        e.bestStreak,
-                        e.swishCount
-                      )
-                        .then(() => setCourtRankingsRefreshNonce((n) => n + 1))
-                        .catch((err: unknown) => {
-                          console.error('Failed to sync local court ranking:', err);
-                        });
-                    }
                   }
                   if (e.instantReplayEnabled && e.bestContestHighlight) {
                     soundEngine.unlock();
@@ -3597,8 +3901,10 @@ export default function App() {
             crowdHypeDuration: e.crowdHypeDuration,
             stamina: e.stamina,
             courtTheme: e.courtTheme,
+            ballSkin: e.ballSkin,
             sessionBestScore: e.sessionBestScore,
             sessionBestStreak: e.sessionBestStreak,
+            lastShotTrajectory: e.shotTrajectoryEnabled ? e.lastShotTrajectory : null,
           };
           renderArena(ctx, rect.width, rect.height, renderState);
           ctx.restore();
@@ -3723,7 +4029,7 @@ export default function App() {
             courtTheme={hud.courtTheme}
             lastHighlight={hud.lastHighlight}
             activeLeague={activeLeague}
-            courtRankingsRefreshNonce={courtRankingsRefreshNonce}
+            globalRankingsRefreshNonce={globalRankingsRefreshNonce}
             friendsCount={friendships.filter((f) => f.status === 'ACCEPTED').length}
             onlineFriendsCount={
               friendships.filter(
@@ -3739,6 +4045,7 @@ export default function App() {
               showCourtLocker ||
               showLeaguesModal ||
               showFriendsModal ||
+              showSettingsPage ||
               Boolean(activeHighlight)
             }
             onSelectMode={handleSelectMode}
@@ -3748,6 +4055,7 @@ export default function App() {
             onOpenAuth={handleOpenAuth}
             onOpenEditUsername={() => setShowEditUsername(true)}
             onOpenCourtLocker={() => setShowCourtLocker(true)}
+            onOpenSettings={() => setShowSettingsPage(true)}
             onOpenHighlightReplay={() => {
               if (hud.lastHighlight) {
                 soundEngine.unlock();
@@ -3846,6 +4154,42 @@ export default function App() {
               pvpClient.leaveQueue();
               setInQueue(false);
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showSettingsPage && hud.phase === 'TITLE' && (
+          <SettingsPage
+            key="settings-page"
+            muted={hud.muted}
+            audioVolume={hud.audioVolume}
+            shotSensitivity={hud.shotSensitivity}
+            hapticIntensity={hud.hapticIntensity}
+            cameraMode={hud.cameraMode}
+            shotTrajectoryEnabled={hud.shotTrajectoryEnabled}
+            instantReplayEnabled={hud.instantReplayEnabled}
+            courtTheme={hud.courtTheme}
+            ballSkin={hud.ballSkin}
+            career={hud.career}
+            playerName={playerName}
+            userProfile={userProfile}
+            rivalriesCount={hud.rivalries.length}
+            onBack={() => setShowSettingsPage(false)}
+            onToggleMute={handleToggleMute}
+            onChangeAudioVolume={handleChangeAudioVolume}
+            onChangeShotSensitivity={handleChangeShotSensitivity}
+            onChangeHapticIntensity={handleChangeHapticIntensity}
+            onSetCameraMode={handleSetCameraMode}
+            onToggleShotTrajectory={handleToggleShotTrajectory}
+            onToggleInstantReplay={handleToggleInstantReplay}
+            onSelectBallSkin={handleSelectBallSkin}
+            onOpenEditUsername={() => setShowEditUsername(true)}
+            onOpenCourtLocker={() => setShowCourtLocker(true)}
+            onOpenAuth={handleOpenAuth}
+            onSignOut={handleSignOut}
+            onResetDefaults={handleResetSettingsToDefaults}
+            onClearLocalProgress={handleClearLocalProgress}
           />
         )}
       </AnimatePresence>
@@ -3954,10 +4298,18 @@ export default function App() {
             key="pause-modal"
             mode={hud.mode}
             muted={hud.muted}
+            audioVolume={hud.audioVolume}
+            shotSensitivity={hud.shotSensitivity}
+            hapticIntensity={hud.hapticIntensity}
             cameraMode={hud.cameraMode}
+            shotTrajectoryEnabled={hud.shotTrajectoryEnabled}
             displayUsername={userProfile ? `@${userProfile.username}` : playerName}
             onToggleMute={handleToggleMute}
+            onChangeAudioVolume={handleChangeAudioVolume}
+            onChangeShotSensitivity={handleChangeShotSensitivity}
+            onChangeHapticIntensity={handleChangeHapticIntensity}
             onToggleCameraMode={handleToggleCameraMode}
+            onToggleShotTrajectory={handleToggleShotTrajectory}
             onOpenEditUsername={() => setShowEditUsername(true)}
             onResume={handlePause}
             onRestart={() =>
@@ -4170,7 +4522,7 @@ export default function App() {
               transition={{ type: 'spring', stiffness: 360, damping: 28 }}
               role="dialog"
               aria-label="Incoming Match Request"
-              className="fixed top-[max(0.75rem,env(safe-area-inset-top))] inset-x-3 sm:inset-x-auto sm:right-5 sm:w-[380px] z-40 bg-[#090B10] border border-[#00ffaa] rounded-[4px] p-4 shadow-[0_16px_44px_rgba(0,0,0,0.85)]"
+              className="fixed top-[max(0.75rem,env(safe-area-inset-top))] inset-x-3 sm:inset-x-auto sm:right-5 sm:w-[380px] z-40 bg-[#05070B] border border-[#00ffaa] rounded-[4px] p-4 shadow-[0_16px_44px_rgba(0,0,0,0.95)]"
             >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="min-w-0">
@@ -4193,7 +4545,7 @@ export default function App() {
                     />
                   </div>
                   {incomingInvite.leagueName && (
-                    <div className="font-mono text-[10px] text-[#FEF08A] truncate">
+                    <div className="font-mono text-[10px] font-semibold text-[#FEF08A] truncate">
                       League: {incomingInvite.leagueName}
                     </div>
                   )}
@@ -4203,7 +4555,7 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="w-full h-1 bg-white/15 rounded-[2px] overflow-hidden mb-3">
+              <div className="w-full h-1 bg-white/25 rounded-[2px] overflow-hidden mb-3">
                 <div
                   className="h-full bg-[#00ffaa] transition-[width] duration-200"
                   style={{
@@ -4243,7 +4595,7 @@ export default function App() {
                     pvpClient.respondMatchInvite(incomingInvite.inviteId, false);
                     setIncomingInvite(null);
                   }}
-                  className="min-h-[44px] px-3 py-2 rounded-[2px] bg-white/12 hover:bg-[#EF4444]/30 border border-white/25 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider cursor-pointer"
+                  className="min-h-[44px] px-3 py-2 rounded-[2px] bg-[#141824] hover:bg-[#240A0E] border border-white/35 hover:border-[#FCA5A5] text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider cursor-pointer"
                 >
                   Decline
                 </button>
@@ -4262,7 +4614,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               transition={{ duration: 0.18 }}
-              className="fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] inset-x-3 sm:inset-x-auto sm:right-5 sm:w-[360px] z-40 bg-[#090B10] border border-[#FDE047]/80 rounded-[4px] p-3.5 shadow-2xl flex items-center justify-between gap-3"
+              className="fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] inset-x-3 sm:inset-x-auto sm:right-5 sm:w-[360px] z-40 bg-[#05070B] border border-[#FDE047] rounded-[4px] p-3.5 shadow-2xl flex items-center justify-between gap-3"
             >
               <div className="min-w-0">
                 <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#FEF08A]">
@@ -4291,7 +4643,7 @@ export default function App() {
                   pvpClient.cancelMatchInvite(outgoingInvite.inviteId);
                   setOutgoingInvite(null);
                 }}
-                className="min-h-[40px] px-3 py-1.5 rounded-[2px] bg-white/12 hover:bg-white/22 border border-white/25 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer shrink-0"
+                className="min-h-[40px] px-3 py-1.5 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer shrink-0"
               >
                 Cancel
               </button>
@@ -4308,8 +4660,8 @@ export default function App() {
             exit={{ opacity: 0, y: -12 }}
             className={`fixed top-[max(0.75rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-[4px] border shadow-xl flex items-center gap-2.5 max-w-[92vw] ${
               inviteNotice.tone === 'err'
-                ? 'bg-[#090B10] border-[#FECACA]/80 text-[#FECACA]'
-                : 'bg-[#090B10] border-[#00ffaa]/80 text-[#00ffaa]'
+                ? 'bg-[#18070A] border-[#FCA5A5] text-[#FEE2E2]'
+                : 'bg-[#05070B] border-[#00ffaa] text-[#00ffaa]'
             }`}
           >
             <span className="font-mono text-xs font-semibold">{inviteNotice.text}</span>
@@ -4317,7 +4669,7 @@ export default function App() {
               type="button"
               onClick={() => setInviteNotice(null)}
               aria-label="Dismiss notification"
-              className="p-1 text-[#E2E8F0] hover:text-[#FFFFFF] cursor-pointer"
+              className="p-1 text-[#FFFFFF] hover:text-[#00ffaa] cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>

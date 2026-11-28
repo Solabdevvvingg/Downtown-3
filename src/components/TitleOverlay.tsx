@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft,
   ChevronRight,
-  Crown,
   Flame,
   Globe,
   GraduationCap,
@@ -11,6 +10,7 @@ import {
   Pencil,
   Play,
   RefreshCw,
+  Settings,
   Swords,
   Timer,
   Trophy,
@@ -20,14 +20,13 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import { fetchCourtRankings, fetchGlobalRankings } from '../firebase';
+import { fetchGlobalRankings } from '../firebase';
 import { HALF_COURT_RACK_INDEX, RACK_CONFIGS } from '../game/constants';
 import { COURT_THEMES, getCourtThemeConfig, getUnlockedCourtsCount } from '../game/courts';
 import { formatFastBreakMs } from '../game/timeFormat';
 import {
   CareerStats,
   ContestHighlight,
-  CourtRankingEntry,
   CourtThemeId,
   GameMode,
   GlobalRankingEntry,
@@ -56,7 +55,7 @@ interface TitleOverlayProps {
   courtTheme: CourtThemeId;
   lastHighlight: ContestHighlight | null;
   activeLeague: PvpLeague | null;
-  courtRankingsRefreshNonce?: number;
+  globalRankingsRefreshNonce?: number;
   friendsCount?: number;
   onlineFriendsCount?: number;
   incomingFriendRequestsCount?: number;
@@ -68,6 +67,7 @@ interface TitleOverlayProps {
   onOpenAuth: () => void;
   onOpenEditUsername: () => void;
   onOpenCourtLocker: () => void;
+  onOpenSettings: () => void;
   onOpenHighlightReplay: () => void;
   onOpenLeagues: () => void;
   onOpenFriends: () => void;
@@ -226,7 +226,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
   courtTheme,
   lastHighlight,
   activeLeague,
-  courtRankingsRefreshNonce = 0,
+  globalRankingsRefreshNonce = 0,
   friendsCount = 0,
   onlineFriendsCount = 0,
   incomingFriendRequestsCount = 0,
@@ -237,6 +237,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
   onOpenAuth,
   onOpenEditUsername,
   onOpenCourtLocker,
+  onOpenSettings,
   onOpenHighlightReplay,
   onOpenLeagues,
   onOpenFriends,
@@ -255,15 +256,9 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
   const [screen, setScreen] = useState<'LOBBY' | 'MODE'>(() =>
     waitingRoom || inQueue ? 'MODE' : 'LOBBY'
   );
-  const [lobbyTab, setLobbyTab] = useState<'PLAY' | 'RANKINGS' | 'GLOBAL'>('PLAY');
+  const [lobbyTab, setLobbyTab] = useState<'PLAY' | 'GLOBAL'>('PLAY');
   const [navDir, setNavDir] = useState<number>(1);
   const [joinCode, setJoinCode] = useState('');
-  const [courtRankings, setCourtRankings] = useState<CourtRankingEntry[]>([]);
-  const [myCourtEntry, setMyCourtEntry] = useState<CourtRankingEntry | null>(null);
-  const [myCourtRank, setMyCourtRank] = useState<number | null>(null);
-  const [rankingsLoading, setRankingsLoading] = useState(false);
-  const [rankingsError, setRankingsError] = useState<string | null>(null);
-  const [manualRankingsReload, setManualRankingsReload] = useState(0);
   const [globalRankings, setGlobalRankings] = useState<GlobalRankingEntry[]>([]);
   const [myGlobalEntry, setMyGlobalEntry] = useState<GlobalRankingEntry | null>(null);
   const [myGlobalRank, setMyGlobalRank] = useState<number | null>(null);
@@ -271,48 +266,6 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
   const [globalRankingsError, setGlobalRankingsError] = useState<string | null>(null);
   const [manualGlobalRankingsReload, setManualGlobalRankingsReload] = useState(0);
   const prevWaitingOrQueueRef = useRef(Boolean(waitingRoom || inQueue));
-
-  useEffect(() => {
-    if (screen !== 'LOBBY' || lobbyTab !== 'RANKINGS') return;
-    if (!userProfile) {
-      setCourtRankings([]);
-      setMyCourtEntry(null);
-      setMyCourtRank(null);
-      setRankingsLoading(false);
-      setRankingsError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setRankingsLoading(true);
-    setRankingsError(null);
-
-    void fetchCourtRankings(courtTheme, userProfile.uid)
-      .then((res) => {
-        if (cancelled) return;
-        setCourtRankings(res.entries);
-        setMyCourtEntry(res.myEntry);
-        setMyCourtRank(res.myRank);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setRankingsError('Could not load court rankings. Tap refresh to try again.');
-      })
-      .finally(() => {
-        if (!cancelled) setRankingsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    screen,
-    lobbyTab,
-    courtTheme,
-    userProfile?.uid,
-    courtRankingsRefreshNonce,
-    manualRankingsReload,
-  ]);
 
   useEffect(() => {
     if (screen !== 'LOBBY' || lobbyTab !== 'GLOBAL') return;
@@ -351,7 +304,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
     screen,
     lobbyTab,
     userProfile?.uid,
-    courtRankingsRefreshNonce,
+    globalRankingsRefreshNonce,
     manualGlobalRankingsReload,
   ]);
 
@@ -427,7 +380,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
   };
 
   const renderUserAccountChip = (compact = false) => (
-    <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 bg-[#05070B]/92 border border-white/25 backdrop-blur-md px-2.5 sm:px-3 py-1 rounded-full shrink-0 shadow-lg">
+    <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 bg-[#05070B]/96 border border-white/35 backdrop-blur-md px-2.5 sm:px-3 py-1 rounded-full shrink-0 shadow-lg">
       {userProfile ? (
         <>
           <button
@@ -438,17 +391,17 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#FFFFFF] hover:text-[#00ffaa] transition-colors cursor-pointer min-h-[36px] px-0.5"
           >
             <UserCircle2 className="w-3.5 h-3.5 text-[#00ffaa] shrink-0" />
-            <span className={compact ? 'max-w-[84px] truncate' : 'max-w-[116px] truncate'}>
+            <span className={compact ? 'max-w-[66px] truncate' : 'max-w-[116px] truncate'}>
               @{userProfile.username}
             </span>
-            <Pencil className="w-3 h-3 text-[#E2E8F0] shrink-0" />
+            <Pencil className="w-3 h-3 text-[#F8FAFC] shrink-0" />
           </button>
           <button
             type="button"
             onClick={onSignOut}
             aria-label="Sign out"
             title="Sign out"
-            className="inline-flex items-center justify-center gap-1 min-w-[34px] min-h-[34px] px-2 rounded-full bg-white/14 hover:bg-white/25 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1 min-w-[34px] min-h-[34px] px-2 rounded-full bg-[#141824] hover:bg-[#1E2434] border border-white/25 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             {!compact && <span className="hidden sm:inline">Out</span>}
@@ -464,15 +417,15 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#FFFFFF] hover:text-[#00ffaa] transition-colors cursor-pointer min-h-[36px] px-0.5"
           >
             <UserCircle2 className="w-3.5 h-3.5 text-[#00ffaa] shrink-0" />
-            <span className={compact ? 'max-w-[78px] truncate' : 'max-w-[104px] truncate'}>
+            <span className={compact ? 'max-w-[64px] truncate' : 'max-w-[104px] truncate'}>
               {playerName}
             </span>
-            <Pencil className="w-3 h-3 text-[#E2E8F0] shrink-0" />
+            <Pencil className="w-3 h-3 text-[#F8FAFC] shrink-0" />
           </button>
           <button
             type="button"
             onClick={onOpenAuth}
-            className="min-h-[32px] px-2.5 py-1 rounded-full bg-white/18 hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer whitespace-nowrap"
+            className="min-h-[32px] px-2.5 py-1 rounded-full bg-[#141824] hover:bg-[#00ffaa] border border-white/30 hover:border-[#00ffaa] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer whitespace-nowrap"
           >
             Sign In
           </button>
@@ -483,9 +436,20 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
         type="button"
         onClick={onToggleMute}
         aria-label={muted ? 'Unmute audio' : 'Mute audio'}
-        className="flex items-center justify-center w-9 h-9 rounded-full bg-white/12 hover:bg-white/24 text-[#FFFFFF] transition-colors cursor-pointer shrink-0"
+        title={muted ? 'Unmute audio' : 'Mute audio'}
+        className="flex items-center justify-center w-9 h-9 rounded-full bg-[#141824] hover:bg-[#1E2434] border border-white/25 text-[#FFFFFF] transition-colors cursor-pointer shrink-0"
       >
         {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+      </button>
+
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        aria-label="Open Settings"
+        title="Settings"
+        className="flex items-center justify-center w-9 h-9 rounded-full bg-[#141824] hover:bg-[#00ffaa] hover:text-[#05070B] border border-white/25 hover:border-[#00ffaa] text-[#FFFFFF] transition-colors cursor-pointer shrink-0"
+      >
+        <Settings className="w-3.5 h-3.5" />
       </button>
     </div>
   );
@@ -497,9 +461,9 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
       perimeterRacks.find((r) => r.id === moneyRack) ??
       perimeterRacks[perimeterRacks.length - 1];
     return (
-      <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-3">
+      <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-3">
         <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em] mb-2.5">
-          <span className="text-[#E2E8F0]">
+          <span className="text-[#F8FAFC] font-semibold">
             Money Ball Rack · <span className="text-[#FFFFFF] font-bold">{selectedRack.label}</span>
           </span>
           <span className="text-[#00ffaa] font-bold">2X + HALF CT</span>
@@ -515,7 +479,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                 className={`min-h-[44px] px-1 py-2 rounded-[2px] font-mono text-[11px] font-bold uppercase border transition-colors cursor-pointer text-center ${
                   active
                     ? 'bg-[#00ffaa] text-[#05070B] border-[#00ffaa]'
-                    : 'bg-[#161922] text-[#FFFFFF] border-white/15 hover:border-white/55'
+                    : 'bg-[#141824] text-[#FFFFFF] border-white/30 hover:border-white/70 hover:bg-[#1E2434]'
                 }`}
               >
                 {rack.shortLabel}
@@ -531,18 +495,18 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
     <button
       type="button"
       onClick={onOpenCourtLocker}
-      className="w-full min-h-[48px] flex items-center gap-3 px-3.5 py-2.5 bg-white/10 hover:bg-white/16 border border-white/20 hover:border-[#00ffaa]/75 rounded-[4px] transition-colors cursor-pointer text-left"
+      className="w-full min-h-[48px] flex items-center gap-3 px-3.5 py-2.5 bg-[#101520] hover:bg-[#182030] border border-white/30 hover:border-[#00ffaa]/85 rounded-[4px] transition-colors cursor-pointer text-left"
       title="Open Court Locker"
     >
       <span
-        className="w-6 h-6 rounded-[2px] border border-white/35 shrink-0 grid grid-cols-2 overflow-hidden"
+        className="w-6 h-6 rounded-[2px] border border-white/45 shrink-0 grid grid-cols-2 overflow-hidden"
         aria-hidden="true"
       >
         <span style={{ backgroundColor: activeCourt.palette.plankColors[0] }} />
         <span style={{ backgroundColor: activeCourt.palette.paint }} />
       </span>
       <div className="min-w-0 flex-1">
-        <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#E2E8F0] block leading-none">
+        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#F8FAFC] block leading-none">
           Arena Hardwood
         </span>
         <span className="text-xs font-semibold text-[#FFFFFF] truncate block mt-1">
@@ -552,7 +516,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
       <span className="font-mono text-[11px] font-bold text-[#00ffaa] tabular-nums shrink-0">
         {unlockedCourts}/{COURT_THEMES.length}
       </span>
-      <ChevronRight className="w-4 h-4 text-[#E2E8F0] shrink-0" />
+      <ChevronRight className="w-4 h-4 text-[#F8FAFC] shrink-0" />
     </button>
   );
 
@@ -571,16 +535,16 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
         onClick={onOpenFriends}
         className={`w-full min-h-[48px] flex items-center gap-3 px-3.5 py-2.5 rounded-[4px] border transition-colors cursor-pointer text-left ${
           hasIncoming
-            ? 'bg-[#FDE047]/15 border-[#FDE047]/75 hover:border-[#FDE047]'
-            : 'bg-white/10 hover:bg-white/16 border-white/20 hover:border-[#00ffaa]/75'
+            ? 'bg-[#1F1804] border-[#FDE047]/80 hover:border-[#FDE047]'
+            : 'bg-[#101520] hover:bg-[#182030] border-white/30 hover:border-[#00ffaa]/85'
         }`}
         title="Open Friends Roster & Match Requests"
       >
-        <span className="w-6 h-6 rounded-[2px] border border-white/30 bg-[#07090E] text-[#00ffaa] shrink-0 flex items-center justify-center">
+        <span className="w-6 h-6 rounded-[2px] border border-white/35 bg-[#05070B] text-[#00ffaa] shrink-0 flex items-center justify-center">
           <Users className="w-3.5 h-3.5" />
         </span>
         <div className="min-w-0 flex-1">
-          <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#E2E8F0] block leading-none">
+          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#F8FAFC] block leading-none">
             Social &amp; Rematch
           </span>
           <span className="text-xs font-semibold text-[#FFFFFF] truncate block mt-1">
@@ -594,7 +558,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
         >
           {statusLabel}
         </span>
-        <ChevronRight className="w-4 h-4 text-[#E2E8F0] shrink-0" />
+        <ChevronRight className="w-4 h-4 text-[#F8FAFC] shrink-0" />
       </button>
     );
   };
@@ -603,17 +567,17 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
     <div
       role="tablist"
       aria-label="Lobby sections"
-      className="grid grid-cols-3 gap-1 bg-[#07090E] p-1 rounded-[4px] border border-white/20"
+      className="grid grid-cols-2 gap-1 bg-[#05070B] p-1 rounded-[4px] border border-white/30"
     >
       <button
         type="button"
         role="tab"
         aria-selected={lobbyTab === 'PLAY'}
         onClick={() => setLobbyTab('PLAY')}
-        className={`min-h-[38px] px-1.5 py-1.5 rounded-[2px] font-sans text-[10px] font-extrabold tracking-tight whitespace-nowrap transition-colors cursor-pointer ${
+        className={`min-h-[38px] px-2.5 py-1.5 rounded-[2px] font-sans text-xs font-extrabold uppercase tracking-wider whitespace-nowrap transition-colors cursor-pointer ${
           lobbyTab === 'PLAY'
             ? 'bg-[#00ffaa] text-[#05070B]'
-            : 'bg-[#161922] text-[#FFFFFF] hover:bg-white/15'
+            : 'bg-[#141824] text-[#FFFFFF] hover:bg-[#1E2434]'
         }`}
       >
         Play Modes
@@ -621,267 +585,31 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
       <button
         type="button"
         role="tab"
-        aria-selected={lobbyTab === 'RANKINGS'}
-        onClick={() => setLobbyTab('RANKINGS')}
-        className={`min-h-[38px] px-1.5 py-1.5 rounded-[2px] font-sans text-[10px] font-extrabold tracking-tight whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center gap-1 ${
-          lobbyTab === 'RANKINGS'
-            ? 'bg-[#00ffaa] text-[#05070B]'
-            : 'bg-[#161922] text-[#FFFFFF] hover:bg-white/15'
-        }`}
-      >
-        <Crown className="w-3 h-3 shrink-0 hidden min-[380px]:inline" />
-        <span>Court Rankings</span>
-      </button>
-      <button
-        type="button"
-        role="tab"
         aria-selected={lobbyTab === 'GLOBAL'}
         onClick={() => setLobbyTab('GLOBAL')}
-        className={`min-h-[38px] px-1.5 py-1.5 rounded-[2px] font-sans text-[10px] font-extrabold tracking-tight whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center gap-1 ${
+        className={`min-h-[38px] px-2.5 py-1.5 rounded-[2px] font-sans text-xs font-extrabold uppercase tracking-wider whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5 ${
           lobbyTab === 'GLOBAL'
             ? 'bg-[#00ffaa] text-[#05070B]'
-            : 'bg-[#161922] text-[#FFFFFF] hover:bg-white/15'
+            : 'bg-[#141824] text-[#FFFFFF] hover:bg-[#1E2434]'
         }`}
       >
-        <Globe className="w-3 h-3 shrink-0 hidden min-[380px]:inline" />
+        <Globe className="w-3.5 h-3.5 shrink-0" />
         <span>Global Rankings</span>
       </button>
-    </div>
-  );
-
-  const renderCourtRankingsTab = () => (
-    <div className="space-y-3">
-      {/* Currently Selected Court Banner */}
-      <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span
-              className="w-7 h-7 rounded-[2px] border border-white/35 shrink-0 grid grid-cols-2 overflow-hidden"
-              aria-hidden="true"
-            >
-              <span style={{ backgroundColor: activeCourt.palette.plankColors[0] }} />
-              <span style={{ backgroundColor: activeCourt.palette.paint }} />
-            </span>
-            <div className="min-w-0">
-              <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#00ffaa] block leading-none">
-                Selected Court
-              </span>
-              <span className="text-sm font-bold text-[#FFFFFF] truncate block mt-1">
-                {activeCourt.name}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={onOpenCourtLocker}
-              className="min-h-[34px] px-2.5 py-1 rounded-[2px] bg-white/14 hover:bg-white/24 border border-white/25 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer whitespace-nowrap"
-            >
-              Switch
-            </button>
-            {userProfile && (
-              <button
-                type="button"
-                onClick={() => setManualRankingsReload((n) => n + 1)}
-                disabled={rankingsLoading}
-                aria-label="Refresh court rankings"
-                title="Refresh court rankings"
-                className="min-w-[34px] min-h-[34px] flex items-center justify-center rounded-[2px] bg-white/14 hover:bg-white/24 border border-white/25 text-[#00ffaa] disabled:opacity-65 cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${rankingsLoading ? 'animate-spin' : ''}`} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {!userProfile ? (
-        <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-4 space-y-3">
-          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
-            Firebase Court Leaderboard
-          </div>
-          <p className="text-xs text-[#E2E8F0] leading-relaxed">
-            Sign in with your shooter handle to view top shooters on{' '}
-            <strong className="text-[#FFFFFF]">{activeCourt.name}</strong> and post your own
-            verified court scores.
-          </p>
-          <button
-            type="button"
-            onClick={onOpenAuth}
-            className="w-full min-h-[44px] py-2.5 px-4 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] text-[#05070B] font-sans text-sm font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
-          >
-            Sign In / Create Handle
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* Current User Standing Card */}
-          <div className="bg-[#07090E] border border-[#00ffaa]/50 rounded-[4px] p-3">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
-                Your Standing · @{userProfile.username}
-              </span>
-              <span className="font-mono text-xs font-bold text-[#FEF08A] tabular-nums">
-                {myCourtRank
-                  ? `Rank #${myCourtRank}`
-                  : myCourtEntry
-                    ? 'Top 25+'
-                    : 'Unranked'}
-              </span>
-            </div>
-            {myCourtEntry ? (
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/15 text-center">
-                <div>
-                  <span className="font-mono text-[9px] uppercase text-[#E2E8F0] block">
-                    Court Best
-                  </span>
-                  <span className="font-mono text-sm font-bold text-[#00ffaa] tabular-nums">
-                    {myCourtEntry.bestScore} PTS
-                  </span>
-                </div>
-                <div>
-                  <span className="font-mono text-[9px] uppercase text-[#E2E8F0] block">
-                    Best Streak
-                  </span>
-                  <span className="font-mono text-sm font-bold text-[#FFFFFF] tabular-nums">
-                    {myCourtEntry.bestStreak}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-mono text-[9px] uppercase text-[#E2E8F0] block">
-                    Swishes
-                  </span>
-                  <span className="font-mono text-sm font-bold text-[#FFFFFF] tabular-nums">
-                    {myCourtEntry.totalSwishes}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <p className="text-[11px] text-[#E2E8F0] leading-snug">
-                No score posted on {activeCourt.name} yet. Finish any Solo, Fast-Break, Heat Check,
-                or PVP round here to rank.
-              </p>
-            )}
-          </div>
-
-          {/* Leaderboard Rows */}
-          <div className="bg-[#07090E] border border-white/20 rounded-[4px] overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/15 flex items-center justify-between">
-              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#FFFFFF]">
-                Top Shooters
-              </span>
-              <span className="font-mono text-[10px] uppercase text-[#E2E8F0] tabular-nums">
-                {courtRankings.length} Ranked
-              </span>
-            </div>
-
-            {rankingsLoading && courtRankings.length === 0 ? (
-              <div className="p-4 text-center font-mono text-xs text-[#E2E8F0]">
-                Loading {activeCourt.name} rankings...
-              </div>
-            ) : rankingsError ? (
-              <div className="p-4 text-center space-y-2">
-                <p className="text-xs text-[#FECACA]">{rankingsError}</p>
-                <button
-                  type="button"
-                  onClick={() => setManualRankingsReload((n) => n + 1)}
-                  className="min-h-[34px] px-3 py-1 rounded-[2px] bg-white/15 hover:bg-white/25 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : courtRankings.length === 0 ? (
-              <div className="p-4 text-center text-xs text-[#E2E8F0] leading-relaxed">
-                No shooters ranked on <strong className="text-[#FFFFFF]">{activeCourt.name}</strong>{' '}
-                yet. Tip off a contest to claim #1!
-              </div>
-            ) : (
-              <div className="divide-y divide-white/15 max-h-[290px] overflow-y-auto">
-                {courtRankings.map((entry, idx) => {
-                  const rank = idx + 1;
-                  const isMe = entry.uid === userProfile.uid;
-                  const rankColor =
-                    rank === 1
-                      ? 'text-[#FEF08A] border-[#FDE047]/65 bg-[#FDE047]/15'
-                      : rank === 2
-                        ? 'text-[#FFFFFF] border-white/45 bg-white/12'
-                        : rank === 3
-                          ? 'text-[#FDBA74] border-[#FDBA74]/60 bg-[#FB923C]/15'
-                          : 'text-[#E2E8F0] border-white/25 bg-[#161922]';
-                  return (
-                    <div
-                      key={entry.uid}
-                      className={`px-3 py-2.5 flex items-center gap-2.5 ${
-                        isMe ? 'bg-[#00ffaa]/12' : ''
-                      }`}
-                    >
-                      <span
-                        className={`w-7 h-7 rounded-[2px] border font-mono text-[11px] font-bold flex items-center justify-center shrink-0 tabular-nums ${rankColor}`}
-                      >
-                        #{rank}
-                      </span>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span
-                            className={`text-xs font-bold truncate ${
-                              isMe ? 'text-[#00ffaa]' : 'text-[#FFFFFF]'
-                            }`}
-                          >
-                            @{entry.username}
-                          </span>
-                          {!isMe && (
-                            <RivalBadgeIcon
-                              rivalry={findRivalryForUsername(
-                                rivalries,
-                                entry.username,
-                                userProfile.username
-                              )}
-                            />
-                          )}
-                          {isMe && (
-                            <span className="font-mono text-[9px] font-bold uppercase text-[#00ffaa] shrink-0">
-                              YOU
-                            </span>
-                          )}
-                        </div>
-                        <div className="font-mono text-[10px] text-[#E2E8F0] truncate tabular-nums">
-                          {entry.bestStreak} strk · {entry.totalSwishes} swishes ·{' '}
-                          {entry.contestsPlayed}g
-                        </div>
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <span className="font-mono text-sm font-bold text-[#FFFFFF] tabular-nums block leading-none">
-                          {entry.bestScore}
-                        </span>
-                        <span className="font-mono text-[9px] uppercase text-[#00ffaa] block mt-0.5">
-                          PTS
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 
   const renderGlobalRankingsTab = () => (
     <div className="space-y-3">
       {/* Global PVP Top 100 Header Banner */}
-      <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-3">
+      <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-7 h-7 rounded-[2px] border border-[#00ffaa]/50 bg-[#00ffaa]/15 text-[#00ffaa] shrink-0 flex items-center justify-center">
+            <span className="w-7 h-7 rounded-[2px] border border-[#00ffaa]/75 bg-[#04241B] text-[#00ffaa] shrink-0 flex items-center justify-center">
               <Globe className="w-4 h-4" />
             </span>
             <div className="min-w-0">
-              <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#00ffaa] block leading-none">
+              <span className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#00ffaa] block leading-none">
                 Global Top 100 · PVP Only
               </span>
               <span className="text-sm font-bold text-[#FFFFFF] truncate block mt-1">
@@ -897,23 +625,23 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               disabled={globalRankingsLoading}
               aria-label="Refresh global PVP rankings"
               title="Refresh global PVP rankings"
-              className="min-w-[34px] min-h-[34px] flex items-center justify-center rounded-[2px] bg-white/14 hover:bg-white/24 border border-white/25 text-[#00ffaa] disabled:opacity-65 cursor-pointer shrink-0"
+              className="min-w-[34px] min-h-[34px] flex items-center justify-center rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#00ffaa] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] cursor-pointer shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${globalRankingsLoading ? 'animate-spin' : ''}`} />
             </button>
           )}
         </div>
-        <p className="font-mono text-[10px] text-[#E2E8F0] mt-2 leading-snug">
+        <p className="font-mono text-[10px] text-[#F8FAFC] mt-2 leading-snug">
           Top single-match Online 1v1 PVP scores across all four courts.
         </p>
       </div>
 
       {!userProfile ? (
-        <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-4 space-y-3">
+        <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-4 space-y-3">
           <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
             Firebase Worldwide PVP Leaderboard
           </div>
-          <p className="text-xs text-[#E2E8F0] leading-relaxed">
+          <p className="text-xs text-[#F8FAFC] leading-relaxed">
             Sign in with your shooter handle to view the{' '}
             <strong className="text-[#FFFFFF]">Top 100 PVP Players Worldwide</strong> across all
             courts and post verified 1v1 PVP scores.
@@ -929,7 +657,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
       ) : (
         <>
           {/* Current User Worldwide Standing Card */}
-          <div className="bg-[#07090E] border border-[#00ffaa]/50 rounded-[4px] p-3">
+          <div className="bg-[#05070B] border border-[#00ffaa]/75 rounded-[4px] p-3">
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa] truncate">
                 Worldwide Standing · @{userProfile.username}
@@ -943,10 +671,10 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               </span>
             </div>
             {myGlobalEntry ? (
-              <div className="space-y-2 pt-2 border-t border-white/15">
+              <div className="space-y-2 pt-2 border-t border-white/25">
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div>
-                    <span className="font-mono text-[9px] uppercase text-[#E2E8F0] block">
+                    <span className="font-mono text-[9px] font-bold uppercase text-[#F8FAFC] block">
                       PVP Best
                     </span>
                     <span className="font-mono text-sm font-bold text-[#00ffaa] tabular-nums">
@@ -954,7 +682,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     </span>
                   </div>
                   <div>
-                    <span className="font-mono text-[9px] uppercase text-[#E2E8F0] block">
+                    <span className="font-mono text-[9px] font-bold uppercase text-[#F8FAFC] block">
                       PVP Record
                     </span>
                     <span className="font-mono text-sm font-bold text-[#FFFFFF] tabular-nums">
@@ -963,7 +691,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     </span>
                   </div>
                   <div>
-                    <span className="font-mono text-[9px] uppercase text-[#E2E8F0] block">
+                    <span className="font-mono text-[9px] font-bold uppercase text-[#F8FAFC] block">
                       Best Streak
                     </span>
                     <span className="font-mono text-sm font-bold text-[#FFFFFF] tabular-nums">
@@ -971,7 +699,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between font-mono text-[10px] text-[#E2E8F0] pt-1.5 border-t border-white/10">
+                <div className="flex items-center justify-between font-mono text-[10px] text-[#F8FAFC] pt-1.5 border-t border-white/20">
                   <span>Top Court</span>
                   <span className="text-[#FFFFFF] font-semibold">
                     {getCourtThemeConfig(myGlobalEntry.bestCourtId).name}
@@ -979,7 +707,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-[#E2E8F0] leading-snug">
+              <p className="text-[11px] text-[#F8FAFC] leading-snug">
                 No Online 1v1 PVP match completed yet. Play any PVP match on any court to enter
                 the Global Top 100.
               </p>
@@ -987,54 +715,54 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           </div>
 
           {/* Global Top 100 Leaderboard Rows */}
-          <div className="bg-[#07090E] border border-white/20 rounded-[4px] overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/15 flex items-center justify-between">
+          <div className="bg-[#05070B] border border-white/30 rounded-[4px] overflow-hidden">
+            <div className="px-3 py-2 border-b border-white/25 flex items-center justify-between">
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#FFFFFF]">
                 Top 100 PVP Shooters
               </span>
-              <span className="font-mono text-[10px] uppercase text-[#E2E8F0] tabular-nums">
+              <span className="font-mono text-[10px] font-semibold uppercase text-[#F8FAFC] tabular-nums">
                 {globalRankings.length} / 100
               </span>
             </div>
 
             {globalRankingsLoading && globalRankings.length === 0 ? (
-              <div className="p-4 text-center font-mono text-xs text-[#E2E8F0]">
+              <div className="p-4 text-center font-mono text-xs text-[#F8FAFC]">
                 Loading worldwide PVP rankings...
               </div>
             ) : globalRankingsError ? (
               <div className="p-4 text-center space-y-2">
-                <p className="text-xs text-[#FECACA]">{globalRankingsError}</p>
+                <p className="text-xs font-medium text-[#FEE2E2]">{globalRankingsError}</p>
                 <button
                   type="button"
                   onClick={() => setManualGlobalRankingsReload((n) => n + 1)}
-                  className="min-h-[34px] px-3 py-1 rounded-[2px] bg-white/15 hover:bg-white/25 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer"
+                  className="min-h-[34px] px-3 py-1 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 font-mono text-[10px] font-bold uppercase text-[#FFFFFF] cursor-pointer"
                 >
                   Retry
                 </button>
               </div>
             ) : globalRankings.length === 0 ? (
-              <div className="p-4 text-center text-xs text-[#E2E8F0] leading-relaxed">
+              <div className="p-4 text-center text-xs text-[#F8FAFC] leading-relaxed">
                 No Online 1v1 PVP scores posted yet. Enter a PVP shootout to claim Global #1!
               </div>
             ) : (
-              <div className="divide-y divide-white/15 max-h-[310px] overflow-y-auto">
+              <div className="divide-y divide-white/20 max-h-[310px] overflow-y-auto">
                 {globalRankings.map((entry, idx) => {
                   const rank = idx + 1;
                   const isMe = entry.uid === userProfile.uid;
                   const courtName = getCourtThemeConfig(entry.bestCourtId).name;
                   const rankColor =
                     rank === 1
-                      ? 'text-[#FEF08A] border-[#FDE047]/65 bg-[#FDE047]/15'
+                      ? 'text-[#FEF08A] border-[#FDE047]/80 bg-[#1F1804]'
                       : rank === 2
-                        ? 'text-[#FFFFFF] border-white/45 bg-white/12'
+                        ? 'text-[#FFFFFF] border-white/60 bg-[#1E2434]'
                         : rank === 3
-                          ? 'text-[#FDBA74] border-[#FDBA74]/60 bg-[#FB923C]/15'
-                          : 'text-[#E2E8F0] border-white/25 bg-[#161922]';
+                          ? 'text-[#FED7AA] border-[#FB923C]/80 bg-[#231407]'
+                          : 'text-[#F8FAFC] border-white/30 bg-[#141824]';
                   return (
                     <div
                       key={entry.uid}
                       className={`px-3 py-2.5 flex items-center gap-2.5 ${
-                        isMe ? 'bg-[#00ffaa]/12' : ''
+                        isMe ? 'bg-[#04241B]' : ''
                       }`}
                     >
                       <span
@@ -1062,12 +790,12 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                             />
                           )}
                           {isMe && (
-                            <span className="font-mono text-[9px] font-bold uppercase text-[#00ffaa] shrink-0">
+                            <span className="font-mono text-[9px] font-bold uppercase text-[#A7F3D0] shrink-0">
                               YOU
                             </span>
                           )}
                         </div>
-                        <div className="font-mono text-[10px] text-[#E2E8F0] truncate tabular-nums">
+                        <div className="font-mono text-[10px] text-[#F8FAFC] truncate tabular-nums">
                           {courtName} · {entry.pvpWins}W-{entry.pvpLosses}L · {entry.bestStreak} strk
                         </div>
                       </div>
@@ -1076,7 +804,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                         <span className="font-mono text-sm font-bold text-[#FFFFFF] tabular-nums block leading-none">
                           {entry.bestScore}
                         </span>
-                        <span className="font-mono text-[9px] uppercase text-[#00ffaa] block mt-0.5">
+                        <span className="font-mono text-[9px] font-bold uppercase text-[#00ffaa] block mt-0.5">
                           PTS
                         </span>
                       </div>
@@ -1095,21 +823,21 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
     if (mode === 'SOLO') {
       return (
         <div className="space-y-3">
-          <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-3.5 space-y-3">
+          <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-3.5 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
                 Contest Format
               </span>
-              <span className="font-mono text-[10px] font-bold uppercase text-[#E2E8F0]">
+              <span className="font-mono text-[10px] font-bold uppercase text-[#F8FAFC]">
                 1:10 · 26 Balls
               </span>
             </div>
             <p className="text-[13px] text-[#FFFFFF] leading-relaxed">
               {activeModeInfo.description}
             </p>
-            <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-white/15">
+            <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-white/25">
               <div>
-                <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                   Best Score
                 </span>
                 <span className="font-mono text-base font-bold text-[#00ffaa] tabular-nums">
@@ -1117,7 +845,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                 </span>
               </div>
               <div>
-                <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                   Career Avg
                 </span>
                 <span className="font-mono text-base font-bold text-[#FFFFFF] tabular-nums">
@@ -1125,7 +853,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                 </span>
               </div>
               <div>
-                <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                   Swish %
                 </span>
                 <span className="font-mono text-base font-bold text-[#FFFFFF] tabular-nums">
@@ -1135,7 +863,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             </div>
           </div>
 
-          <ul className="bg-[#07090E] border border-white/15 rounded-[4px] p-3 space-y-1.5 text-xs text-[#E2E8F0]">
+          <ul className="bg-[#05070B] border border-white/30 rounded-[4px] p-3 space-y-1.5 text-xs text-[#F8FAFC]">
             {activeModeInfo.rules.map((rule) => (
               <li key={rule} className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00ffaa] mt-1.5 shrink-0" />
@@ -1150,7 +878,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
     if (mode === 'FAST_BREAK') {
       return (
         <div className="space-y-3">
-          <div className="bg-[#07090E] border border-[#00ffaa]/50 rounded-[4px] p-3.5 space-y-3">
+          <div className="bg-[#05070B] border border-[#00ffaa]/75 rounded-[4px] p-3.5 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
                 Time Attack Splits
@@ -1164,15 +892,15 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             <p className="text-[13px] text-[#FFFFFF] leading-relaxed">
               {activeModeInfo.description}
             </p>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-2 border-t border-white/15">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-2 border-t border-white/25">
               {RACK_CONFIGS.map((rack, idx) => {
                 const splitMs = career.bestFastBreakSplitsMs[idx] ?? 0;
                 return (
                   <div
                     key={rack.id}
-                    className="bg-[#161922] border border-white/15 rounded-[2px] px-1.5 py-1.5 text-center"
+                    className="bg-[#141824] border border-white/30 rounded-[2px] px-1.5 py-1.5 text-center"
                   >
-                    <span className="font-mono text-[9px] uppercase text-[#E2E8F0] block">
+                    <span className="font-mono text-[9px] font-bold uppercase text-[#F8FAFC] block">
                       R{idx + 1} · {rack.shortLabel}
                     </span>
                     <span className="font-mono text-[11px] font-bold text-[#FFFFFF] tabular-nums block mt-0.5">
@@ -1184,7 +912,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             </div>
           </div>
 
-          <ul className="bg-[#07090E] border border-white/15 rounded-[4px] p-3 space-y-1.5 text-xs text-[#E2E8F0]">
+          <ul className="bg-[#05070B] border border-white/30 rounded-[4px] p-3 space-y-1.5 text-xs text-[#F8FAFC]">
             {activeModeInfo.rules.map((rule) => (
               <li key={rule} className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00ffaa] mt-1.5 shrink-0" />
@@ -1199,7 +927,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
     if (mode === 'HEAT_CHECK') {
       return (
         <div className="space-y-3">
-          <div className="bg-[#07090E] border border-[#FDE047]/55 rounded-[4px] p-3.5 space-y-3">
+          <div className="bg-[#05070B] border border-[#FDE047]/75 rounded-[4px] p-3.5 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#FEF08A]">
                 Endless Sudden Death
@@ -1211,15 +939,15 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             <p className="text-[13px] text-[#FFFFFF] leading-relaxed">
               {activeModeInfo.description}
             </p>
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/15">
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/25">
               <div>
-                <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                   Shot Clock
                 </span>
                 <span className="font-mono text-sm font-bold text-[#FFFFFF]">Unlimited</span>
               </div>
               <div>
-                <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                   Basket Behavior
                 </span>
                 <span className="font-mono text-sm font-bold text-[#FEF08A]">Dynamic Shift</span>
@@ -1227,7 +955,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             </div>
           </div>
 
-          <ul className="bg-[#07090E] border border-white/15 rounded-[4px] p-3 space-y-1.5 text-xs text-[#E2E8F0]">
+          <ul className="bg-[#05070B] border border-white/30 rounded-[4px] p-3 space-y-1.5 text-xs text-[#F8FAFC]">
             {activeModeInfo.rules.map((rule) => (
               <li key={rule} className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#FDE047] mt-1.5 shrink-0" />
@@ -1242,12 +970,12 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
     if (mode === 'PRACTICE') {
       return (
         <div className="space-y-3">
-          <div className="bg-[#07090E] border border-[#00ffaa]/50 rounded-[4px] p-3.5 space-y-3">
+          <div className="bg-[#05070B] border border-[#00ffaa]/75 rounded-[4px] p-3.5 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
                 Release Timing Blueprint
               </span>
-              <span className="font-mono text-[10px] font-bold uppercase text-[#E2E8F0]">
+              <span className="font-mono text-[10px] font-bold uppercase text-[#F8FAFC]">
                 No Clock · Guide On
               </span>
             </div>
@@ -1256,30 +984,30 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             </p>
 
             {/* Visual Meter Guide Bar */}
-            <div className="bg-[#161922] border border-white/20 rounded-[2px] p-2.5 space-y-2">
-              <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-[#FFFFFF]">
+            <div className="bg-[#101520] border border-white/30 rounded-[2px] p-2.5 space-y-2">
+              <div className="flex items-center justify-between font-mono text-[9px] font-bold uppercase tracking-wider text-[#FFFFFF]">
                 <span>Early</span>
-                <span className="text-[#6EE7B7]">Good</span>
+                <span className="text-[#A7F3D0]">Good</span>
                 <span className="text-[#FEF08A] font-bold">Gold Perfect</span>
-                <span className="text-[#FECACA]">Late</span>
+                <span className="text-[#FEE2E2]">Late</span>
               </div>
-              <div className="relative h-3.5 w-full rounded-[2px] bg-[#07090E] overflow-hidden flex border border-white/25">
-                <div className="h-full bg-[#7DD3FC]/45" style={{ width: '50%' }} />
-                <div className="h-full bg-[#34D399]/75" style={{ width: '16%' }} />
+              <div className="relative h-3.5 w-full rounded-[2px] bg-[#05070B] overflow-hidden flex border border-white/35">
+                <div className="h-full bg-[#7DD3FC]/65" style={{ width: '50%' }} />
+                <div className="h-full bg-[#34D399]/85" style={{ width: '16%' }} />
                 <div
-                  className="h-full bg-[#FDE047] shadow-[0_0_10px_rgba(253,224,71,0.75)]"
+                  className="h-full bg-[#FDE047] shadow-[0_0_10px_rgba(253,224,71,0.8)]"
                   style={{ width: '16%' }}
                 />
-                <div className="h-full bg-[#34D399]/75" style={{ width: '12%' }} />
-                <div className="h-full bg-[#FCA5A5]/60" style={{ width: '6%' }} />
+                <div className="h-full bg-[#34D399]/85" style={{ width: '12%' }} />
+                <div className="h-full bg-[#FCA5A5]/80" style={{ width: '6%' }} />
               </div>
-              <p className="font-mono text-[10px] text-[#E2E8F0] leading-snug">
+              <p className="font-mono text-[10px] text-[#F8FAFC] leading-snug">
                 Hold touch or Space until the bar enters the <strong className="text-[#FEF08A]">Gold bracket</strong>, then lift to swish.
               </p>
             </div>
           </div>
 
-          <ul className="bg-[#07090E] border border-white/15 rounded-[4px] p-3 space-y-1.5 text-xs text-[#E2E8F0]">
+          <ul className="bg-[#05070B] border border-white/30 rounded-[4px] p-3 space-y-1.5 text-xs text-[#F8FAFC]">
             {activeModeInfo.rules.map((rule) => (
               <li key={rule} className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00ffaa] mt-1.5 shrink-0" />
@@ -1295,19 +1023,19 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
     return (
       <div className="space-y-3">
         {!userProfile ? (
-          <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-4 space-y-3">
+          <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
                 Online 1v1 Shootout
               </span>
-              <span className="font-mono text-[10px] font-bold text-[#E2E8F0] tabular-nums">
+              <span className="font-mono text-[10px] font-bold text-[#F8FAFC] tabular-nums">
                 {wsConnected ? `${lobbyStats.onlinePlayers} Online` : 'Connecting'}
               </span>
             </div>
             <div className="text-sm font-bold text-[#FFFFFF]">
               Sign In for Online PVP &amp; Leagues
             </div>
-            <p className="text-xs text-[#E2E8F0] leading-relaxed">
+            <p className="text-xs text-[#F8FAFC] leading-relaxed">
               Claim a persistent shooter handle to match opponents worldwide, create private 4-letter rooms, and climb league tables.
             </p>
             <button
@@ -1319,10 +1047,10 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             </button>
           </div>
         ) : waitingRoom ? (
-          <div className="bg-[#07090E] border border-[#00ffaa]/65 rounded-[4px] p-4 space-y-3">
+          <div className="bg-[#05070B] border border-[#00ffaa]/80 rounded-[4px] p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#E2E8F0] truncate">
+                <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#F8FAFC] truncate">
                   {waitingRoom.leagueName
                     ? `${waitingRoom.leagueName} · Private Code`
                     : 'Private Room Code'}
@@ -1334,27 +1062,27 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               <button
                 type="button"
                 onClick={onLeaveRoom}
-                className="min-h-[44px] px-4 py-2 rounded-[2px] bg-white/15 hover:bg-white/25 font-mono text-xs font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer shrink-0"
+                className="min-h-[44px] px-4 py-2 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 font-mono text-xs font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer shrink-0"
               >
                 Leave
               </button>
             </div>
-            <p className="text-xs text-[#E2E8F0] leading-relaxed">
+            <p className="text-xs text-[#F8FAFC] leading-relaxed">
               Share this 4-character room code with a friend. The contest starts automatically once both players are ready.
             </p>
           </div>
         ) : (
-          <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-3.5 space-y-3">
+          <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-3.5 space-y-3">
             {/* League Scope Row */}
-            <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/15">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/25">
               <div className="min-w-0 flex items-center gap-2 text-xs">
                 <Trophy
                   className={`w-4 h-4 shrink-0 ${
-                    activeLeague ? 'text-[#00ffaa]' : 'text-[#E2E8F0]'
+                    activeLeague ? 'text-[#00ffaa]' : 'text-[#F8FAFC]'
                   }`}
                 />
                 <div className="min-w-0">
-                  <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block leading-none">
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block leading-none">
                     Matchmaking Pool
                   </span>
                   <span className="font-semibold text-[#FFFFFF] truncate block mt-0.5">
@@ -1367,7 +1095,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     onClick={onClearActiveLeague}
                     title="Switch back to Global Arena"
                     aria-label="Clear active league"
-                    className="p-1.5 rounded-[2px] bg-white/14 hover:bg-white/24 text-[#FFFFFF] cursor-pointer shrink-0"
+                    className="p-1.5 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/30 text-[#FFFFFF] cursor-pointer shrink-0"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1379,8 +1107,8 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                   onClick={onOpenFriends}
                   className={`min-h-[40px] px-2.5 py-1.5 rounded-[2px] border font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer whitespace-nowrap inline-flex items-center gap-1 ${
                     incomingFriendRequestsCount > 0
-                      ? 'border-[#FDE047] bg-[#FDE047]/15 text-[#FEF08A]'
-                      : 'border-white/35 text-[#FFFFFF] hover:border-[#00ffaa] hover:text-[#00ffaa]'
+                      ? 'border-[#FDE047] bg-[#1F1804] text-[#FEF08A]'
+                      : 'border-white/40 bg-[#141824] text-[#FFFFFF] hover:border-[#00ffaa] hover:text-[#00ffaa]'
                   }`}
                 >
                   <Users className="w-3 h-3" />
@@ -1395,7 +1123,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                 <button
                   type="button"
                   onClick={onOpenLeagues}
-                  className="min-h-[40px] px-3 py-1.5 rounded-[2px] border border-[#00ffaa]/80 text-[#00ffaa] hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer whitespace-nowrap"
+                  className="min-h-[40px] px-3 py-1.5 rounded-[2px] border border-[#00ffaa]/85 bg-[#04241B] text-[#A7F3D0] hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer whitespace-nowrap"
                 >
                   {activeLeague ? 'League' : 'Leagues'}
                 </button>
@@ -1403,12 +1131,12 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             </div>
 
             {inQueue ? (
-              <div className="bg-[#00ffaa]/12 border border-[#00ffaa]/60 rounded-[2px] p-3 flex items-center justify-between gap-3">
+              <div className="bg-[#04241B] border border-[#00ffaa]/75 rounded-[2px] p-3 flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
                     Finding Opponent...
                   </div>
-                  <p className="text-xs text-[#E2E8F0] mt-0.5 truncate">
+                  <p className="text-xs text-[#F8FAFC] mt-0.5 truncate">
                     {activeLeague
                       ? `Matching inside ${activeLeague.name}`
                       : `Searching Global Arena (${lobbyStats.queuedPlayers} queued)`}
@@ -1417,14 +1145,14 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                 <button
                   type="button"
                   onClick={onLeaveQueue}
-                  className="min-h-[40px] px-3 py-1.5 rounded-[2px] bg-[#161922] border border-white/30 text-[#FFFFFF] font-mono text-[10px] font-bold uppercase cursor-pointer shrink-0"
+                  className="min-h-[40px] px-3 py-1.5 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] font-mono text-[10px] font-bold uppercase cursor-pointer shrink-0"
                 >
                   Cancel
                 </button>
               </div>
             ) : (
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between font-mono text-[10px] text-[#E2E8F0] uppercase tracking-wider">
+                <div className="flex items-center justify-between font-mono text-[10px] font-semibold text-[#F8FAFC] uppercase tracking-wider">
                   <span>Private Match</span>
                   <span>
                     Record: {career.pvpWins}W-{career.pvpLosses}L-{career.pvpDraws}D
@@ -1434,7 +1162,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                   type="button"
                   disabled={!wsConnected}
                   onClick={onCreateRoom}
-                  className="w-full min-h-[44px] px-3 py-2.5 rounded-[2px] bg-white/12 hover:bg-white/20 border border-white/20 disabled:opacity-65 font-mono text-xs font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-2.5 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 disabled:bg-[#1A202C] disabled:text-[#F1F5F9] disabled:border-white/20 font-mono text-xs font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer"
                 >
                   Create Private Room
                 </button>
@@ -1447,12 +1175,12 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     onChange={(ev) => setJoinCode(ev.target.value.toUpperCase())}
                     placeholder="ROOM CODE"
                     aria-label="Room Code"
-                    className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-[2px] bg-[#161922] border border-white/25 font-mono text-sm uppercase tracking-widest text-[#FFFFFF] placeholder:text-[#CBD5E1] focus:outline-none focus:border-[#00ffaa]"
+                    className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-[2px] bg-[#0B0F17] border border-white/40 font-mono text-sm uppercase tracking-widest text-[#FFFFFF] placeholder:text-[#E2E8F0] focus:outline-none focus:border-[#00ffaa]"
                   />
                   <button
                     type="submit"
                     disabled={!wsConnected || joinCode.trim().length < 4}
-                    className="min-h-[44px] px-4 py-2 rounded-[2px] bg-[#FFFFFF] hover:bg-[#00ffaa] disabled:opacity-65 text-[#05070B] font-mono text-xs font-bold uppercase transition-colors cursor-pointer whitespace-nowrap"
+                    className="min-h-[44px] px-4 py-2 rounded-[2px] bg-[#FFFFFF] hover:bg-[#00ffaa] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs font-bold uppercase transition-colors cursor-pointer whitespace-nowrap"
                   >
                     Join
                   </button>
@@ -1460,7 +1188,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               </div>
             )}
 
-            {pvpError && <div className="text-xs text-[#FECACA] font-semibold">{pvpError}</div>}
+            {pvpError && <div className="text-xs text-[#FEE2E2] font-semibold">{pvpError}</div>}
           </div>
         )}
 
@@ -1486,19 +1214,19 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             .slice(0, 5);
 
           return (
-            <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-3 space-y-2">
+            <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
                   {onlineOpponents.length > 0 ? 'PVP Lobby Shooters' : 'Known Rivals'}
                 </span>
-                <span className="font-mono text-[10px] text-[#E2E8F0] tabular-nums">
+                <span className="font-mono text-[10px] font-semibold text-[#F8FAFC] tabular-nums">
                   {onlineOpponents.length > 0
                     ? `${onlineOpponents.length} Active`
                     : `${recordedRivals.length} H2H`}
                 </span>
               </div>
 
-              <div className="divide-y divide-white/12 max-h-[144px] overflow-y-auto">
+              <div className="divide-y divide-white/20 max-h-[144px] overflow-y-auto">
                 {onlineOpponents.map((opp) => {
                   const rival = findRivalryForUsername(rivalries, opp.name, meName);
                   const oppDisplay = opp.name.startsWith('@') ? opp.name : `@${opp.name}`;
@@ -1507,7 +1235,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                       ? 'text-[#00ffaa]'
                       : opp.status === 'IN_MATCH'
                         ? 'text-[#FEF08A]'
-                        : 'text-[#CBD5E1]';
+                        : 'text-[#F8FAFC]';
                   const statusText =
                     opp.status === 'QUEUED'
                       ? 'Queue'
@@ -1530,7 +1258,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                           <span
                             className={
                               rival.losses > rival.wins
-                                ? 'text-[#FECACA] font-bold'
+                                ? 'text-[#FEE2E2] font-bold'
                                 : rival.wins > rival.losses
                                   ? 'text-[#00ffaa] font-bold'
                                   : 'text-[#FEF08A] font-bold'
@@ -1539,7 +1267,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                             {rival.wins}-{rival.losses}
                           </span>
                         ) : (
-                          <span className="text-[#CBD5E1]">
+                          <span className="text-[#F8FAFC]">
                             {opp.record.wins}W-{opp.record.losses}L
                           </span>
                         )}
@@ -1565,7 +1293,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     <span
                       className={`font-mono text-[10px] font-bold tabular-nums shrink-0 ${
                         r.losses > r.wins
-                          ? 'text-[#FECACA]'
+                          ? 'text-[#FEE2E2]'
                           : r.wins > r.losses
                             ? 'text-[#00ffaa]'
                             : 'text-[#FEF08A]'
@@ -1600,8 +1328,8 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
       if (waitingRoom) {
         return (
           <div className="flex items-center gap-2">
-            <div className="flex-1 min-h-[52px] px-4 py-2.5 rounded-[2px] bg-[#07090E] border border-[#00ffaa]/75 flex items-center justify-between">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-[#FFFFFF]">
+            <div className="flex-1 min-h-[52px] px-4 py-2.5 rounded-[2px] bg-[#05070B] border border-[#00ffaa]/80 flex items-center justify-between">
+              <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FFFFFF]">
                 Room Ready
               </span>
               <span className="font-mono text-base font-bold text-[#00ffaa] tracking-widest">
@@ -1611,7 +1339,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             <button
               type="button"
               onClick={onLeaveRoom}
-              className="min-h-[52px] px-4 py-2.5 rounded-[2px] bg-white/15 hover:bg-white/25 text-[#FFFFFF] font-mono text-xs font-bold uppercase cursor-pointer"
+              className="min-h-[52px] px-4 py-2.5 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] font-mono text-xs font-bold uppercase cursor-pointer"
             >
               Leave
             </button>
@@ -1623,7 +1351,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           type="button"
           disabled={!wsConnected}
           onClick={inQueue ? onLeaveQueue : onJoinQueue}
-          className={`w-full min-h-[52px] py-3.5 px-5 rounded-[2px] font-sans text-sm sm:text-base font-extrabold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-65 ${
+          className={`w-full min-h-[52px] py-3.5 px-5 rounded-[2px] font-sans text-sm sm:text-base font-extrabold uppercase tracking-wider transition-all cursor-pointer disabled:bg-[#1A202C] disabled:text-[#F1F5F9] ${
             inQueue
               ? 'bg-[#FFFFFF] text-[#05070B] hover:bg-[#FECACA]'
               : 'bg-[#00ffaa] text-[#05070B] hover:bg-[#33ffbb] active:scale-[0.99]'
@@ -1677,10 +1405,10 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               aria-label="Game Lobby"
             >
               {/* Top Arena Status + Account Pill */}
-              <header className="shrink-0 min-h-[56px] px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2.5 flex items-center justify-between gap-2 bg-[#05070B]/94 border-b border-white/20 backdrop-blur-md">
+              <header className="shrink-0 min-h-[56px] px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2.5 flex items-center justify-between gap-2 bg-[#05070B]/96 border-b border-white/30 backdrop-blur-md">
                 <span
                   className={`font-mono text-[11px] font-bold uppercase tracking-[0.12em] tabular-nums truncate ${
-                    wsConnected ? 'text-[#00ffaa]' : 'text-[#E2E8F0]'
+                    wsConnected ? 'text-[#00ffaa]' : 'text-[#F8FAFC]'
                   }`}
                 >
                   {wsConnected ? `● ${lobbyStats.onlinePlayers} Online` : '● Offline Ready'}
@@ -1689,13 +1417,13 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               </header>
 
               {/* Open Top Live-Arena Court Showcase Window */}
-              <div className="shrink-0 px-4 py-4 bg-gradient-to-b from-[#05070B]/88 via-[#05070B]/72 to-[#0F1117]/98 flex flex-col justify-end min-h-[126px]">
+              <div className="shrink-0 px-4 py-4 bg-gradient-to-b from-[#05070B]/92 via-[#05070B]/78 to-[#0A0D14]/98 flex flex-col justify-end min-h-[126px]">
                 <div className="flex items-end justify-between gap-3">
                   <div>
                     <h1 className="font-display text-3xl sm:text-[2.25rem] font-extrabold leading-[0.88] tracking-[-0.04em] text-[#00ffaa] uppercase drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)]">
                       Downtown 3
                     </h1>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#FFFFFF] block mt-1.5 drop-shadow-[0_1px_6px_rgba(0,0,0,0.95)]">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#FFFFFF] block mt-1.5 drop-shadow-[0_1px_6px_rgba(0,0,0,0.95)]">
                       Three-Point Shootout
                     </span>
                   </div>
@@ -1704,7 +1432,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     <button
                       type="button"
                       onClick={onOpenHighlightReplay}
-                      className="min-h-[40px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] bg-[#05070B]/95 border border-[#00ffaa] text-[#00ffaa] hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer tabular-nums shrink-0 shadow-lg"
+                      className="min-h-[40px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] bg-[#05070B]/98 border border-[#00ffaa] text-[#00ffaa] hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer tabular-nums shrink-0 shadow-lg"
                     >
                       <Play className="w-3 h-3 fill-current shrink-0" />
                       <span>+{lastHighlight.pointsAwarded} Replay</span>
@@ -1714,20 +1442,18 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               </div>
 
               {/* Scrollable Lobby Mode Selection Deck */}
-              <div className="flex-1 min-h-0 overflow-y-auto bg-[#0F1117]/98 border-t border-white/20 px-4 pt-3.5 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4">
+              <div className="flex-1 min-h-0 overflow-y-auto bg-[#0A0D14]/98 border-t border-white/30 px-4 pt-3.5 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4">
                 {renderLobbyTabBar()}
 
-                {lobbyTab === 'RANKINGS' ? (
-                  renderCourtRankingsTab()
-                ) : lobbyTab === 'GLOBAL' ? (
+                {lobbyTab === 'GLOBAL' ? (
                   renderGlobalRankingsTab()
                 ) : (
                   <>
                     {/* Compact 4-Stat Career Strip */}
-                    <div className="bg-[#07090E] border border-white/20 rounded-[4px] p-3">
+                    <div className="bg-[#05070B] border border-white/30 rounded-[4px] p-3">
                       <div className="grid grid-cols-4 gap-2 text-center">
                         <div>
-                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                             Best
                           </span>
                           <span className="font-mono text-base font-bold text-[#FFFFFF] tabular-nums">
@@ -1735,7 +1461,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                           </span>
                         </div>
                         <div>
-                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                             Career
                           </span>
                           <span className="font-mono text-base font-bold text-[#00ffaa] tabular-nums">
@@ -1743,7 +1469,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                           </span>
                         </div>
                         <div>
-                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                             Streak
                           </span>
                           <span className="font-mono text-base font-bold text-[#FFFFFF] tabular-nums">
@@ -1751,7 +1477,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                           </span>
                         </div>
                         <div>
-                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#E2E8F0] block">
+                          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#F8FAFC] block">
                             Fast PB
                           </span>
                           <span className="font-mono text-sm font-bold text-[#FFFFFF] tabular-nums">
@@ -1762,15 +1488,15 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                         </div>
                       </div>
                       {hasPvpRecord && (
-                        <div className="mt-2 pt-2 border-t border-white/15 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.12em]">
-                          <span className="text-[#E2E8F0]">PVP Record</span>
+                        <div className="mt-2 pt-2 border-t border-white/25 flex items-center justify-between font-mono text-[10px] font-bold uppercase tracking-[0.12em]">
+                          <span className="text-[#F8FAFC]">PVP Record</span>
                           <span className="font-bold tabular-nums">
                             <span className="text-[#00ffaa]">{career.pvpWins}W</span>
-                            <span className="text-[#E2E8F0]">-</span>
-                            <span className="text-[#FECACA]">{career.pvpLosses}L</span>
+                            <span className="text-[#F8FAFC]">-</span>
+                            <span className="text-[#FEE2E2]">{career.pvpLosses}L</span>
                             {career.pvpDraws > 0 && (
                               <>
-                                <span className="text-[#E2E8F0]">-</span>
+                                <span className="text-[#F8FAFC]">-</span>
                                 <span className="text-[#FEF08A]">{career.pvpDraws}D</span>
                               </>
                             )}
@@ -1782,10 +1508,10 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     {/* Full-Width Mode Selection Cards */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between px-0.5">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#E2E8F0]">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#F8FAFC]">
                           Choose Game Mode
                         </span>
-                        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#00ffaa]">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#00ffaa]">
                           Tap to Enter
                         </span>
                       </div>
@@ -1810,12 +1536,12 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                             onClick={() => handleOpenModeScreen(item.id)}
                             className={`w-full min-h-[60px] flex items-center gap-3 px-3.5 py-3 rounded-[4px] border text-left transition-all active:scale-[0.99] cursor-pointer ${
                               isLastSelected
-                                ? 'bg-[#07090E] border-[#00ffaa]/80 shadow-[0_0_0_1px_rgba(0,255,170,0.2)]'
-                                : 'bg-[#07090E]/92 border-white/20 hover:border-white/45'
+                                ? 'bg-[#05070B] border-[#00ffaa]/85 shadow-[0_0_0_1px_rgba(0,255,170,0.25)]'
+                                : 'bg-[#05070B]/96 border-white/30 hover:border-white/60'
                             }`}
                           >
                             <span
-                              className="w-10 h-10 rounded-[2px] flex items-center justify-center shrink-0 border border-white/20 bg-[#161922]"
+                              className="w-10 h-10 rounded-[2px] flex items-center justify-center shrink-0 border border-white/30 bg-[#141824]"
                               style={{ color: item.accentHex }}
                             >
                               {renderModeIcon(item.id, 'w-5 h-5')}
@@ -1827,18 +1553,18 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                                   {item.name}
                                 </span>
                               </div>
-                              <span className="text-xs text-[#E2E8F0] block truncate mt-0.5">
+                              <span className="text-xs text-[#F8FAFC] block truncate mt-0.5">
                                 {item.tagline}
                               </span>
                             </div>
 
                             <span
-                              className="font-mono text-[10px] font-bold uppercase px-2 py-1 rounded-[2px] bg-[#161922] border border-white/15 shrink-0 max-w-[116px] truncate tabular-nums"
+                              className="font-mono text-[10px] font-bold uppercase px-2 py-1 rounded-[2px] bg-[#141824] border border-white/30 shrink-0 max-w-[116px] truncate tabular-nums"
                               style={{ color: item.accentHex }}
                             >
                               {modeStat}
                             </span>
-                            <ChevronRight className="w-4 h-4 text-[#E2E8F0] shrink-0" />
+                            <ChevronRight className="w-4 h-4 text-[#F8FAFC] shrink-0" />
                           </button>
                         );
                       })}
@@ -1862,15 +1588,15 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               animate="center"
               exit="exit"
               transition={{ type: 'spring', stiffness: 360, damping: 32 }}
-              className="flex-1 flex flex-col min-h-0 bg-[#0F1117]/96 backdrop-blur-md"
+              className="flex-1 flex flex-col min-h-0 bg-[#0A0D14]/98 backdrop-blur-md"
               aria-label={`${activeModeInfo.name} Mode Setup`}
             >
               {/* Sticky Mode Screen Top Bar (Back / Title / Mute & Account) */}
-              <header className="shrink-0 min-h-[56px] px-3.5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2.5 bg-[#05070B]/96 border-b border-white/20 flex items-center justify-between gap-2">
+              <header className="shrink-0 min-h-[56px] px-3.5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2.5 bg-[#05070B]/98 border-b border-white/30 flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={handleBackToLobby}
-                  className="min-h-[44px] px-2.5 -ml-1 rounded-[2px] inline-flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider text-[#00ffaa] hover:bg-white/15 transition-colors cursor-pointer shrink-0"
+                  className="min-h-[44px] px-2.5 -ml-1 rounded-[2px] inline-flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider text-[#00ffaa] hover:bg-[#141824] transition-colors cursor-pointer shrink-0"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Lobby</span>
@@ -1880,7 +1606,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                   <div className="font-sans text-sm sm:text-base font-extrabold uppercase tracking-wide text-[#FFFFFF] truncate leading-none">
                     {activeModeInfo.name}
                   </div>
-                  <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#00ffaa] truncate mt-1">
+                  <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#00ffaa] truncate mt-1">
                     {mode === 'PVP'
                       ? activeLeague
                         ? activeLeague.name
@@ -1897,7 +1623,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                       type="button"
                       onClick={onOpenEditUsername}
                       aria-label="Account profile"
-                      className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[2px] bg-white/14 text-[#00ffaa] cursor-pointer"
+                      className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/25 text-[#00ffaa] cursor-pointer"
                     >
                       <UserCircle2 className="w-4 h-4" />
                     </button>
@@ -1905,7 +1631,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     <button
                       type="button"
                       onClick={onOpenAuth}
-                      className="min-h-[38px] px-2.5 py-1.5 rounded-[2px] bg-white/18 hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer whitespace-nowrap"
+                      className="min-h-[38px] px-2.5 py-1.5 rounded-[2px] bg-[#141824] hover:bg-[#00ffaa] border border-white/30 hover:border-[#00ffaa] hover:text-[#05070B] font-mono text-[10px] font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer whitespace-nowrap"
                     >
                       Sign In
                     </button>
@@ -1914,9 +1640,18 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     type="button"
                     onClick={onToggleMute}
                     aria-label={muted ? 'Unmute audio' : 'Mute audio'}
-                    className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[2px] bg-white/14 text-[#FFFFFF] cursor-pointer"
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/25 text-[#FFFFFF] cursor-pointer"
                   >
                     {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    aria-label="Open Settings"
+                    title="Settings"
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[2px] bg-[#141824] hover:bg-[#00ffaa] border border-white/25 hover:border-[#00ffaa] hover:text-[#05070B] text-[#FFFFFF] transition-colors cursor-pointer"
+                  >
+                    <Settings className="w-4 h-4" />
                   </button>
                 </div>
               </header>
@@ -1931,7 +1666,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                   <button
                     type="button"
                     onClick={onOpenHighlightReplay}
-                    className="w-full min-h-[44px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-[4px] border border-[#00ffaa]/70 bg-[#07090E] text-[#00ffaa] hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer tabular-nums"
+                    className="w-full min-h-[44px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-[4px] border border-[#00ffaa]/80 bg-[#05070B] text-[#00ffaa] hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer tabular-nums"
                   >
                     <Play className="w-3.5 h-3.5 fill-current shrink-0" />
                     <span>Watch Last Highlight (+{lastHighlight.pointsAwarded} pts)</span>
@@ -1940,7 +1675,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               </div>
 
               {/* Sticky Thumb-Zone Bottom CTA Bar */}
-              <footer className="shrink-0 px-4 pt-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] bg-[#05070B]/98 border-t border-white/20 backdrop-blur-md">
+              <footer className="shrink-0 px-4 pt-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] bg-[#05070B]/98 border-t border-white/30 backdrop-blur-md">
                 {renderPrimaryCtaButton(true)}
               </footer>
             </motion.section>
@@ -1951,7 +1686,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
       {/* ===================================================================== */}
       {/* DESKTOP SIDEBAR + LIVE ARENA STAGE (md:+)                             */}
       {/* ===================================================================== */}
-      <aside className="hidden md:flex pointer-events-auto w-[356px] lg:w-[368px] shrink-0 h-full bg-[#0F1117] border-r border-white/20 p-6 flex-col overflow-hidden">
+      <aside className="hidden md:flex pointer-events-auto w-[356px] lg:w-[368px] shrink-0 h-full bg-[#0A0D14] border-r border-white/30 p-6 flex-col overflow-hidden">
         <AnimatePresence mode="wait" custom={navDir}>
           {screen === 'LOBBY' ? (
             <motion.div
@@ -1969,28 +1704,24 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                 <h1 className="font-display text-[2.1rem] lg:text-[2.35rem] font-extrabold leading-[0.88] tracking-[-0.04em] text-[#00ffaa] uppercase">
                   Downtown 3
                 </h1>
-                <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#E2E8F0] block mt-1.5">
+                <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#F8FAFC] block mt-1.5">
                   Three-Point Shootout
                 </span>
               </div>
 
               <div className="mb-4">{renderLobbyTabBar()}</div>
 
-              {lobbyTab === 'RANKINGS' ? (
-                <div className="flex-1 min-h-0 overflow-y-auto pr-0.5">
-                  {renderCourtRankingsTab()}
-                </div>
-              ) : lobbyTab === 'GLOBAL' ? (
+              {lobbyTab === 'GLOBAL' ? (
                 <div className="flex-1 min-h-0 overflow-y-auto pr-0.5">
                   {renderGlobalRankingsTab()}
                 </div>
               ) : (
                 <>
                   {/* 2x2 Career Stats Grid */}
-                  <div className="border-t border-white/20 pt-4 mb-5">
+                  <div className="border-t border-white/30 pt-4 mb-5">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                       <div>
-                        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#E2E8F0] block mb-0.5">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#F8FAFC] block mb-0.5">
                           Best
                         </span>
                         <span className="font-mono text-lg font-bold text-[#FFFFFF] tabular-nums leading-none">
@@ -1998,7 +1729,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                         </span>
                       </div>
                       <div>
-                        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#E2E8F0] block mb-0.5">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#F8FAFC] block mb-0.5">
                           Career
                         </span>
                         <span className="font-mono text-lg font-bold text-[#00ffaa] tabular-nums leading-none">
@@ -2006,7 +1737,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                         </span>
                       </div>
                       <div>
-                        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#E2E8F0] block mb-0.5">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#F8FAFC] block mb-0.5">
                           Streak
                         </span>
                         <span className="font-mono text-lg font-bold text-[#FFFFFF] tabular-nums leading-none">
@@ -2014,7 +1745,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                         </span>
                       </div>
                       <div>
-                        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#E2E8F0] block mb-0.5">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#F8FAFC] block mb-0.5">
                           Fast-Break
                         </span>
                         <span className="font-mono text-lg font-bold text-[#FFFFFF] tabular-nums leading-none">
@@ -2026,15 +1757,15 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     </div>
 
                     {hasPvpRecord && (
-                      <div className="mt-3 pt-2 border-t border-white/15 flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.12em]">
-                        <span className="text-[#E2E8F0]">PVP Record</span>
+                      <div className="mt-3 pt-2 border-t border-white/25 flex items-center justify-between font-mono text-[11px] font-bold uppercase tracking-[0.12em]">
+                        <span className="text-[#F8FAFC]">PVP Record</span>
                         <span className="font-bold tabular-nums">
                           <span className="text-[#00ffaa]">{career.pvpWins}W</span>
-                          <span className="text-[#E2E8F0]">-</span>
-                          <span className="text-[#FECACA]">{career.pvpLosses}L</span>
+                          <span className="text-[#F8FAFC]">-</span>
+                          <span className="text-[#FEE2E2]">{career.pvpLosses}L</span>
                           {career.pvpDraws > 0 && (
                             <>
-                              <span className="text-[#E2E8F0]">-</span>
+                              <span className="text-[#F8FAFC]">-</span>
                               <span className="text-[#FEF08A]">{career.pvpDraws}D</span>
                             </>
                           )}
@@ -2045,7 +1776,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
 
                   {/* Lobby Mode Cards */}
                   <div className="mb-4 space-y-2 flex-1">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#E2E8F0] block">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#F8FAFC] block">
                       Select Mode
                     </span>
                     {MODE_CATALOG.map((item) => {
@@ -2057,8 +1788,8 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                           onClick={() => handleOpenModeScreen(item.id)}
                           className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-[4px] border text-left transition-all cursor-pointer ${
                             selected
-                              ? 'bg-[#07090E] border-[#00ffaa]/85'
-                              : 'bg-[#161922] border-white/15 hover:border-white/45'
+                              ? 'bg-[#05070B] border-[#00ffaa]/85'
+                              : 'bg-[#141824] border-white/30 hover:border-white/65 hover:bg-[#1E2434]'
                           }`}
                         >
                           <span style={{ color: item.accentHex }} className="shrink-0">
@@ -2068,11 +1799,11 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                             <div className="font-mono text-xs font-bold uppercase text-[#FFFFFF] truncate">
                               {item.name}
                             </div>
-                            <div className="text-[11px] text-[#E2E8F0] truncate">
+                            <div className="text-[11px] text-[#F8FAFC] truncate">
                               {item.tagline}
                             </div>
                           </div>
-                          <ChevronRight className="w-4 h-4 text-[#E2E8F0] shrink-0" />
+                          <ChevronRight className="w-4 h-4 text-[#F8FAFC] shrink-0" />
                         </button>
                       );
                     })}
@@ -2097,7 +1828,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               className="flex-1 flex flex-col min-h-0"
             >
               {/* Back to Lobby + Mode Heading */}
-              <div className="shrink-0 pb-4 border-b border-white/20 mb-4">
+              <div className="shrink-0 pb-4 border-b border-white/30 mb-4">
                 <button
                   type="button"
                   onClick={handleBackToLobby}
@@ -2109,7 +1840,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
 
                 <div className="flex items-center gap-2.5">
                   <span
-                    className="w-9 h-9 rounded-[2px] flex items-center justify-center bg-[#07090E] border border-white/25 shrink-0"
+                    className="w-9 h-9 rounded-[2px] flex items-center justify-center bg-[#05070B] border border-white/35 shrink-0"
                     style={{ color: activeModeInfo.accentHex }}
                   >
                     {renderModeIcon(mode, 'w-4 h-4')}
@@ -2118,7 +1849,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
                     <h2 className="font-sans text-lg sm:text-xl font-extrabold uppercase tracking-wide text-[#FFFFFF] leading-none truncate">
                       {activeModeInfo.name}
                     </h2>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#E2E8F0] block mt-1 truncate">
+                    <span className="font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-[#F8FAFC] block mt-1 truncate">
                       {activeModeInfo.tagline}
                     </span>
                   </div>
@@ -2133,7 +1864,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               </div>
 
               {/* Pinned Bottom Primary CTA */}
-              <div className="shrink-0 pt-4 mt-2 border-t border-white/20">
+              <div className="shrink-0 pt-4 mt-2 border-t border-white/30">
                 {renderPrimaryCtaButton(false)}
               </div>
             </motion.div>
@@ -2151,9 +1882,9 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ duration: 0.16 }}
-              className="flex flex-col gap-1 min-w-0 bg-[#05070B]/92 border border-white/20 rounded-[4px] px-3.5 py-2 backdrop-blur-md shadow-lg"
+              className="flex flex-col gap-1 min-w-0 bg-[#05070B]/96 border border-white/35 rounded-[4px] px-3.5 py-2 backdrop-blur-md shadow-lg"
             >
-              <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-[#FFFFFF] truncate">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.15em] text-[#FFFFFF] truncate">
                 {screen === 'LOBBY'
                   ? 'Select a mode from the lobby to customize & tip off'
                   : mode === 'PVP' && activeLeague
@@ -2162,7 +1893,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
               </span>
               <span
                 className={`font-mono text-[11px] font-bold uppercase tracking-[0.12em] tabular-nums ${
-                  wsConnected ? 'text-[#00ffaa]' : 'text-[#E2E8F0]'
+                  wsConnected ? 'text-[#00ffaa]' : 'text-[#F8FAFC]'
                 }`}
               >
                 {wsConnected ? `● ${lobbyStats.onlinePlayers} Online` : '● Offline Ready'}
@@ -2173,8 +1904,8 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           {renderUserAccountChip(false)}
         </nav>
 
-        <footer className="px-6 py-3.5 border-t border-white/20 bg-[#05070B]/95 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 z-10">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[11px] uppercase tracking-[0.08em] text-[#FFFFFF]">
+        <footer className="px-6 py-3.5 border-t border-white/30 bg-[#05070B]/98 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 z-10">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-[#FFFFFF]">
             <span>Hold Space/Touch to Aim</span>
             <span>Release in Green/Gold to Shoot</span>
             <span>Esc to Pause</span>
@@ -2184,7 +1915,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
             <button
               type="button"
               onClick={onOpenHighlightReplay}
-              className="pointer-events-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] border border-[#00ffaa] bg-[#07090E] text-[#00ffaa] hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer tabular-nums shrink-0"
+              className="pointer-events-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] border border-[#00ffaa] bg-[#05070B] text-[#00ffaa] hover:bg-[#00ffaa] hover:text-[#05070B] font-mono text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer tabular-nums shrink-0"
               title={`Watch best shot replay: ${lastHighlight.rackLabel} (+${lastHighlight.pointsAwarded} pts)`}
             >
               <Play className="w-3 h-3 fill-current shrink-0" />

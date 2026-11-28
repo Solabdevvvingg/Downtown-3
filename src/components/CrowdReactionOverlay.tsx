@@ -50,16 +50,16 @@ export const CrowdReactionOverlay: React.FC<CrowdReactionOverlayProps> = ({ reac
         }}
       >
         <div
-          className="relative rounded-[4px] bg-[#0F1117]/97 border backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-2xl overflow-hidden"
+          className="relative rounded-[4px] bg-[#05070B]/98 border backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-2xl overflow-hidden"
           style={{
-            borderColor: `${reaction.accentColor}E6`,
+            borderColor: `${reaction.accentColor}F2`,
             boxShadow: `0 12px 38px ${reaction.accentColor}40`,
           }}
         >
           <div className="flex items-center justify-between gap-3">
             {/* Left: Procedural Decibel Equalizer */}
-            <div className="flex flex-col items-start shrink-0 bg-[#07090E] border border-white/25 rounded-[2px] px-2.5 py-1.5">
-              <div className="flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider text-white">
+            <div className="flex flex-col items-start shrink-0 bg-[#0A0D14] border border-white/35 rounded-[2px] px-2.5 py-1.5">
+              <div className="flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider text-[#FFFFFF]">
                 <Volume2 className="w-3 h-3" style={{ color: reaction.accentColor }} />
                 <span className="tabular-nums">{reaction.decibels.toFixed(1)} dB</span>
               </div>
@@ -95,15 +95,15 @@ export const CrowdReactionOverlay: React.FC<CrowdReactionOverlayProps> = ({ reac
                 </span>
               </div>
 
-              <div className="font-display text-lg sm:text-xl font-extrabold tracking-tight leading-tight text-white uppercase truncate mt-0.5">
+              <div className="font-display text-lg sm:text-xl font-extrabold tracking-tight leading-tight text-[#FFFFFF] uppercase truncate mt-0.5">
                 {reaction.headline}{' '}
                 <span style={{ color: reaction.accentColor }} className="tabular-nums">
                   · {reaction.streak} Straight
                 </span>
               </div>
 
-              <div className="text-[11px] sm:text-xs font-medium text-[#E2E8F0] truncate">
-                Crowd Reaction: <span className="text-white font-bold">“{reaction.chant}”</span>
+              <div className="text-[11px] sm:text-xs font-medium text-[#F8FAFC] truncate">
+                Crowd Reaction: <span className="text-[#FFFFFF] font-bold">“{reaction.chant}”</span>
               </div>
             </div>
           </div>

@@ -10,6 +10,8 @@ export type CourtThemeId =
   | 'neon_arena'
   | 'championship_gold';
 
+export type BallSkinId = 'classic_leather' | 'fireball' | 'electric' | 'championship_gold';
+
 export type ShotOutcome = 'SWISH' | 'MAKE' | 'BANK' | 'RIM_OUT' | 'AIRBALL';
 
 export type BallStatus = 'PENDING' | 'IN_AIR' | 'MADE' | 'MISSED';
@@ -161,6 +163,7 @@ export interface ContestHighlight {
   id: number;
   mode: GameMode;
   courtTheme: CourtThemeId;
+  ballSkin?: BallSkinId;
   rackIndex: number;
   rackLabel: string;
   ballIndex: number;
@@ -235,6 +238,7 @@ export interface ActiveBall {
   difficultyLevelAtRelease?: number;
   timingQualityAtRelease?: TimingQuality;
   isBuzzerBeater: boolean;
+  ballSkin?: BallSkinId;
   isRemote?: boolean;
   skipRimCollision?: boolean;
   pos: Vec3;
@@ -357,18 +361,6 @@ export interface FriendshipRecord {
   status: FriendshipStatus;
   isIncoming: boolean;
   createdAtMs: number;
-  updatedAtMs: number;
-}
-
-export interface CourtRankingEntry {
-  uid: string;
-  courtId: CourtThemeId;
-  username: string;
-  bestScore: number;
-  bestStreak: number;
-  totalSwishes: number;
-  contestsPlayed: number;
-  lastScore: number;
   updatedAtMs: number;
 }
 
@@ -556,6 +548,7 @@ export interface HudSnapshot {
   shotChart: ShotChartEntry[];
   staminaEfficiency: StaminaEfficiencyStats;
   courtTheme: CourtThemeId;
+  ballSkin: BallSkinId;
   contestHighlight: ContestHighlight | null;
   lastHighlight: ContestHighlight | null;
   rivalries: RivalryRecord[];
@@ -568,4 +561,24 @@ export interface HudSnapshot {
   instantReplayHeadline: string | null;
   instantReplayPoints: number;
   cameraMode: CameraMode;
+  shotTrajectoryEnabled: boolean;
+  audioVolume: number;
+  shotSensitivity: number;
+  hapticIntensity: HapticIntensity;
 }
+
+export type HapticIntensity = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface ShotTrajectoryArc {
+  ballId: number;
+  points: Vec3[];
+  hoopPos: Vec3;
+  rimCrossPoint?: Vec3;
+  timingQuality: TimingQuality;
+  isMoney: boolean;
+  outcome: 'MADE' | 'MISSED' | null;
+  age: number;
+  fadeAfter: number;
+  frozen: boolean;
+}
+

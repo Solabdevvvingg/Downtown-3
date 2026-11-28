@@ -369,6 +369,7 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
               multiplierAtRelease: highlight.multiplier,
               streakAtRelease: highlight.streakAtMake,
               isBuzzerBeater: highlight.isBuzzerBeater,
+              ballSkin: highlight.ballSkin ?? 'classic_leather',
               pos: { x: currentSample.x, y: currentSample.y, z: currentSample.z },
               vel: { x: 0, y: 0, z: 0 },
               spinAngle: currentSample.spinAngle,
@@ -443,6 +444,7 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
             crowdHypeDuration: 1.6,
             stamina: 100,
             courtTheme: highlight.courtTheme,
+            ballSkin: highlight.ballSkin ?? 'classic_leather',
             sessionBestScore: highlight.pointsAwarded,
             sessionBestStreak: highlight.streakAtMake,
           };
@@ -509,12 +511,12 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="highlight-replay-title"
-        className="w-full max-w-3xl max-h-[94dvh] overflow-y-auto bg-[#0F1117] border border-white/25 rounded-[4px] p-4 sm:p-6 my-auto shadow-2xl"
+        className="w-full max-w-3xl max-h-[94dvh] overflow-y-auto bg-[#0A0D14] border border-white/35 rounded-[4px] p-4 sm:p-6 my-auto shadow-2xl"
       >
         {/* Top Broadcast Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-white/20 pb-3.5 mb-4">
+        <div className="flex items-start justify-between gap-4 border-b border-white/25 pb-3.5 mb-4">
           <div>
-            <div className="flex flex-wrap items-center gap-x-2 font-mono text-[10px] uppercase tracking-[0.12em] font-semibold text-[#E2E8F0]">
+            <div className="flex flex-wrap items-center gap-x-2 font-mono text-[10px] uppercase tracking-[0.12em] font-semibold text-[#F8FAFC]">
               <span>Game Highlights</span>
               <span aria-hidden="true">·</span>
               <span>{highlight.rackLabel}</span>
@@ -544,31 +546,31 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close Highlight Replay"
-            className="flex items-center justify-center w-10 h-10 rounded-[2px] bg-[#07090E] border border-white/25 text-[#FFFFFF] hover:border-[#00ffaa] transition-colors cursor-pointer shrink-0"
+            className="flex items-center justify-center w-10 h-10 rounded-[2px] bg-[#141824] border border-white/35 text-[#FFFFFF] hover:border-[#00ffaa] transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* 3D Broadcast Replay Viewport */}
-        <div className="relative w-full aspect-[16/10] sm:aspect-video rounded-[2px] overflow-hidden bg-[#07090E] border border-white/25 mb-3.5">
+        <div className="relative w-full aspect-[16/10] sm:aspect-video rounded-[2px] overflow-hidden bg-[#05070B] border border-white/35 mb-3.5">
           <canvas ref={canvasRef} className="block w-full h-full" />
 
           {/* Subtle Top-Left Replay Mode Readout */}
-          <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-2 text-[10px] font-mono font-bold tracking-wider text-[#FFFFFF] bg-[#05070B]/96 px-2.5 py-1 rounded-[2px] border border-white/25 shadow-lg">
+          <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-2 text-[10px] font-mono font-bold tracking-wider text-[#FFFFFF] bg-[#05070B]/98 px-2.5 py-1 rounded-[2px] border border-white/35 shadow-lg">
             <span>{isSlowMoActive ? 'SLO-MO CAM' : 'REPLAY CAM'}</span>
-            <span aria-hidden="true" className="text-[#CBD5E1]">
+            <span aria-hidden="true" className="text-[#F8FAFC]">
               /
             </span>
             <span className="text-[#00ffaa]">{courtCfg.name.toUpperCase()}</span>
           </div>
 
           {/* Lower-Third Shot Info Strip */}
-          <div className="pointer-events-none absolute bottom-2.5 left-3 right-3 flex items-center justify-between gap-2 text-[11px] text-[#FFFFFF] bg-[#05070B]/96 px-3 py-1.5 rounded-[2px] border border-white/25 shadow-lg">
+          <div className="pointer-events-none absolute bottom-2.5 left-3 right-3 flex items-center justify-between gap-2 text-[11px] text-[#FFFFFF] bg-[#05070B]/98 px-3 py-1.5 rounded-[2px] border border-white/35 shadow-lg">
             <span className="font-bold truncate">
               {highlight.shooterName} · Ball {highlight.ballIndex + 1}/{getRackBallCount(highlight.rackIndex)}
             </span>
-            <span className="font-mono font-semibold text-[#E2E8F0] tabular-nums shrink-0">
+            <span className="font-mono font-semibold text-[#F8FAFC] tabular-nums shrink-0">
               {highlight.timingQuality} · {highlight.multiplier}× · Wind{' '}
               {highlight.windMph.toFixed(1)} mph
             </span>
@@ -576,7 +578,7 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
         </div>
 
         {/* Scrubber & Playback Controls */}
-        <div className="bg-[#07090E] border border-white/20 rounded-[2px] p-3 mb-4 space-y-2.5">
+        <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-3 mb-4 space-y-2.5">
           <div className="relative flex items-center">
             <div
               aria-hidden="true"
@@ -609,14 +611,14 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
               <button
                 type="button"
                 onClick={() => resetPlayback(true)}
-                className="min-h-[40px] px-3 py-2 rounded-[2px] bg-white/14 hover:bg-white/24 border border-white/20 text-[#FFFFFF] font-mono text-xs font-bold uppercase flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                className="min-h-[40px] px-3 py-2 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] font-mono text-xs font-bold uppercase flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Restart</span>
               </button>
             </div>
 
-            <div className="flex items-center gap-1 p-1 bg-[#12151E] border border-white/20 rounded-[2px]">
+            <div className="flex items-center gap-1 p-1 bg-[#12151E] border border-white/30 rounded-[2px]">
               {(
                 [
                   { id: 'CINEMATIC', label: 'Auto Slo-Mo' },
@@ -631,7 +633,7 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
                   className={`px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase rounded-[2px] transition-colors cursor-pointer whitespace-nowrap ${
                     speedMode === opt.id
                       ? 'bg-[#FFFFFF] text-[#05070B]'
-                      : 'bg-[#1A1D26] text-[#FFFFFF] hover:bg-white/15'
+                      : 'bg-[#1A1D26] text-[#FFFFFF] hover:bg-[#252A38]'
                   }`}
                 >
                   {opt.label}
@@ -642,9 +644,9 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
         </div>
 
         {/* Highlight Telemetry Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center bg-[#07090E] border border-white/20 rounded-[2px] p-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center bg-[#05070B] border border-white/30 rounded-[2px] p-3">
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0]">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-[#F8FAFC]">
               Points
             </div>
             <div className="font-mono text-base font-bold text-[#00ffaa] tabular-nums mt-0.5">
@@ -652,7 +654,7 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
             </div>
           </div>
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0]">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-[#F8FAFC]">
               Streak / Mult
             </div>
             <div className="font-mono text-base font-bold text-[#FEF08A] tabular-nums mt-0.5">
@@ -660,7 +662,7 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
             </div>
           </div>
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0]">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-[#F8FAFC]">
               Release
             </div>
             <div className="font-mono text-base font-bold text-[#00ffaa] tabular-nums mt-0.5">
@@ -668,7 +670,7 @@ export const HighlightReplayModal: React.FC<HighlightReplayModalProps> = ({
             </div>
           </div>
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#E2E8F0]">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-[#F8FAFC]">
               Shot Type
             </div>
             <div className="font-mono text-sm sm:text-base font-bold text-[#FFFFFF] truncate mt-0.5">

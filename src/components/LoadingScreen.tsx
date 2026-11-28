@@ -78,7 +78,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
       initial={{ opacity: 1 }}
       animate={{ opacity: exiting ? 0 : 1 }}
       transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#07090E] px-6 py-8 select-none overflow-hidden"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#05070B] px-6 py-8 select-none overflow-hidden"
       role="status"
       aria-live="polite"
       aria-label="Loading Downtown 3"
@@ -88,7 +88,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(circle at center, rgba(22, 25, 34, 0.92) 0%, rgba(7, 9, 14, 1) 72%)',
+            'radial-gradient(circle at center, rgba(16, 20, 30, 0.92) 0%, rgba(5, 7, 11, 1) 72%)',
         }}
       />
 
@@ -147,7 +147,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
           <h1 className="font-display text-4xl sm:text-5xl font-extrabold uppercase tracking-[-0.04em] leading-none text-[#00ffaa]">
             Downtown 3
           </h1>
-          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[#CBD5E1] mt-2">
+          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[#FFFFFF] mt-2">
             {reason === 'LONG_AWAY'
               ? 'Welcome Back · Refreshing Session'
               : 'Three-Point Shootout'}
@@ -157,12 +157,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
         {/* Real Progress Bar */}
         <div className="w-full max-w-xs mb-6">
           <div className="flex items-center justify-between text-xs mb-2">
-            <span className="text-white font-semibold truncate pr-3">{activeStep}</span>
-            <span className="font-mono font-bold text-[#6EE7B7] tabular-nums shrink-0">
+            <span className="text-[#FFFFFF] font-semibold truncate pr-3">{activeStep}</span>
+            <span className="font-mono font-bold text-[#00ffaa] tabular-nums shrink-0">
               {Math.round(displayPct)}%
             </span>
           </div>
-          <div className="w-full h-1.5 bg-white/15 rounded-[1px] overflow-hidden">
+          <div className="w-full h-1.5 bg-white/25 rounded-[1px] overflow-hidden">
             <div
               className="h-full bg-[#00ffaa] transition-[width] duration-150 ease-out"
               style={{ width: `${Math.max(8, Math.min(100, displayPct))}%` }}
@@ -171,23 +171,23 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
         </div>
 
         {/* Real Readiness Milestones */}
-        <div className="w-full max-w-xs border-t border-white/20 pt-4 space-y-2 text-left">
+        <div className="w-full max-w-xs border-t border-white/25 pt-4 space-y-2 text-left">
           {steps.map((step) => (
             <div
               key={step.key}
               className="flex items-center justify-between text-xs"
             >
-              <span className={step.done ? 'text-white font-semibold' : 'text-[#CBD5E1]'}>
+              <span className={step.done ? 'text-[#FFFFFF] font-semibold' : 'text-[#F1F5F9]'}>
                 {step.label}
               </span>
               <span className="flex items-center gap-1 font-mono text-[10px] uppercase font-bold tabular-nums">
                 {step.done ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-[#6EE7B7]" />
-                    <span className="text-[#6EE7B7]">Ready</span>
+                    <Check className="w-3.5 h-3.5 text-[#00ffaa]" />
+                    <span className="text-[#00ffaa]">Ready</span>
                   </>
                 ) : (
-                  <span className="text-[#CBD5E1]">Loading</span>
+                  <span className="text-[#F1F5F9]">Loading</span>
                 )}
               </span>
             </div>

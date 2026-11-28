@@ -92,7 +92,7 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-40 flex items-center justify-center bg-[#07090E]/92 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-[#05070B]/94 backdrop-blur-sm p-4"
       onClick={(ev) => {
         if (ev.target === ev.currentTarget && !submitting) {
           onClose();
@@ -104,23 +104,23 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
         transition={{ duration: 0.18 }}
-        className="w-full max-w-md bg-[#0F1117] border border-white/25 rounded-[4px] p-5 sm:p-6 shadow-2xl"
+        className="w-full max-w-md bg-[#0A0D14] border border-white/35 rounded-[4px] p-5 sm:p-6 shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-username-title"
       >
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
-            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#6EE7B7] block mb-1">
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[#00ffaa] block mb-1">
               Shooter Identity
             </span>
             <h2
               id="edit-username-title"
-              className="font-display text-2xl sm:text-3xl font-extrabold uppercase tracking-tight text-white leading-none"
+              className="font-display text-2xl sm:text-3xl font-extrabold uppercase tracking-tight text-[#FFFFFF] leading-none"
             >
               Edit Username
             </h2>
-            <p className="text-xs text-[#CBD5E1] mt-1.5 leading-relaxed">
+            <p className="text-xs text-[#F8FAFC] mt-1.5 leading-relaxed">
               {isAccount
                 ? 'Updates your public PVP handle and the label floating above your shooter.'
                 : 'Updates the display label floating above your shooter.'}
@@ -131,7 +131,7 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
             onClick={onClose}
             disabled={submitting}
             aria-label="Close username editor"
-            className="flex items-center justify-center w-9 h-9 rounded-[2px] bg-[#161922] hover:bg-[#1E2330] border border-white/25 text-white transition-colors cursor-pointer shrink-0 disabled:opacity-65"
+            className="flex items-center justify-center w-9 h-9 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] transition-colors cursor-pointer shrink-0 disabled:bg-[#1A202C] disabled:text-[#F1F5F9] disabled:border-white/20"
           >
             <X className="w-4 h-4" />
           </button>
@@ -141,13 +141,13 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
           <div>
             <label
               htmlFor="edit-username-input"
-              className="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#E2E8F0] mb-1.5"
+              className="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#FFFFFF] mb-1.5"
             >
               {isAccount ? 'Handle' : 'Shooter Display Name'}
             </label>
             <div className="relative flex items-center">
               {isAccount && (
-                <AtSign className="w-4 h-4 text-[#6EE7B7] absolute left-3 pointer-events-none" />
+                <AtSign className="w-4 h-4 text-[#00ffaa] absolute left-3 pointer-events-none" />
               )}
               <input
                 id="edit-username-input"
@@ -162,10 +162,10 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
                 placeholder={isAccount ? 'your_handle' : 'Shooter'}
                 className={`w-full ${
                   isAccount ? 'pl-9 pr-3.5' : 'px-3.5'
-                } py-2.5 rounded-[2px] bg-[#07090E] border border-white/30 focus:border-[#00ffaa] focus:outline-none text-base sm:text-sm font-mono text-white placeholder:text-[#94A3B8]`}
+                } py-2.5 rounded-[2px] bg-[#05070B] border border-white/40 focus:border-[#00ffaa] focus:outline-none text-base sm:text-sm font-mono text-[#FFFFFF] placeholder:text-[#E2E8F0]`}
               />
             </div>
-            <div className="mt-1.5 text-[11px] font-medium text-[#CBD5E1]">
+            <div className="mt-1.5 text-[11px] font-medium text-[#F8FAFC]">
               {isAccount
                 ? '3–16 characters · letters, numbers, and underscores only.'
                 : '1–16 characters · sign in to reserve a unique @handle for Online PVP.'}
@@ -173,7 +173,7 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
           </div>
 
           {error && (
-            <div className="text-xs font-semibold text-[#FECACA] bg-[#EF4444]/18 border border-[#FECACA]/60 rounded-[2px] px-3 py-2">
+            <div className="text-xs font-semibold text-[#FEE2E2] bg-[#240A0E] border border-[#FCA5A5]/80 rounded-[2px] px-3 py-2">
               {error}
             </div>
           )}
@@ -183,14 +183,14 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="min-h-[42px] px-4 py-2 rounded-[2px] bg-[#161922] hover:bg-[#1E2330] border border-white/25 font-mono text-xs font-bold uppercase text-white transition-colors cursor-pointer disabled:opacity-65"
+              className="min-h-[42px] px-4 py-2 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 font-mono text-xs font-bold uppercase text-[#FFFFFF] transition-colors cursor-pointer disabled:bg-[#1A202C] disabled:text-[#F1F5F9] disabled:border-white/20"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="min-h-[42px] inline-flex items-center justify-center gap-1.5 px-5 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:opacity-65 text-[#05070B] font-mono text-xs font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
+              className="min-h-[42px] inline-flex items-center justify-center gap-1.5 px-5 py-2 rounded-[2px] bg-[#00ffaa] hover:bg-[#33ffbb] disabled:bg-[#1A202C] disabled:text-[#F1F5F9] text-[#05070B] font-mono text-xs font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>{submitting ? 'Saving...' : 'Save Username'}</span>
@@ -198,15 +198,15 @@ export const EditUsernameModal: React.FC<EditUsernameModalProps> = ({
           </div>
 
           {!isAccount && onOpenAuth && (
-            <div className="pt-3 border-t border-white/20 flex items-center justify-between gap-2">
-              <span className="text-[11px] text-[#CBD5E1]">Have an existing cloud handle?</span>
+            <div className="pt-3 border-t border-white/25 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-[#F8FAFC]">Have an existing cloud handle?</span>
               <button
                 type="button"
                 onClick={() => {
                   onClose();
                   onOpenAuth();
                 }}
-                className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#6EE7B7] hover:underline cursor-pointer"
+                className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#00ffaa] hover:underline cursor-pointer"
               >
                 Sign In with Google
               </button>

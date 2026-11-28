@@ -547,74 +547,6 @@
         "updatedAt"
       ]
     },
-    "CourtRankingEntry": {
-      "title": "CourtRankingEntry",
-      "description": "Public per-court leaderboard entry storing a signed-in shooter's best contest score, streak, and swishes on a specific court.",
-      "type": "object",
-      "properties": {
-        "uid": {
-          "type": "string",
-          "description": "Firebase Auth UID of the shooter matching document ID.",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "courtId": {
-          "type": "string",
-          "enum": ["wooden_gym", "street_asphalt", "neon_arena", "championship_gold"],
-          "description": "Court identifier matching the parent courtRankings document ID."
-        },
-        "username": {
-          "type": "string",
-          "description": "Shooter display handle shown on the court leaderboard.",
-          "minLength": 3,
-          "maxLength": 16,
-          "pattern": "^[a-zA-Z0-9_]+$"
-        },
-        "bestScore": {
-          "type": "integer",
-          "description": "Highest single-contest score achieved by this shooter on this court."
-        },
-        "bestStreak": {
-          "type": "integer",
-          "description": "Longest consecutive make streak achieved on this court."
-        },
-        "totalSwishes": {
-          "type": "integer",
-          "description": "Cumulative clean swishes recorded on this court."
-        },
-        "contestsPlayed": {
-          "type": "integer",
-          "description": "Total completed contests on this court."
-        },
-        "lastScore": {
-          "type": "integer",
-          "description": "Most recent completed contest score on this court."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server timestamp when this court ranking entry was created."
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server timestamp of the latest contest submission on this court."
-        }
-      },
-      "required": [
-        "uid",
-        "courtId",
-        "username",
-        "bestScore",
-        "bestStreak",
-        "totalSwishes",
-        "contestsPlayed",
-        "lastScore",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
     "PvpGlobalRankingEntry": {
       "title": "PvpGlobalRankingEntry",
       "description": "Global Online 1v1 PVP leaderboard entry storing a signed-in shooter's best PVP score across all courts and PVP match stats.",
@@ -737,10 +669,6 @@
     "/friendships/{pairId}": {
       "schema": { "$ref": "#/entities/Friendship" },
       "description": "Two-player friend requests and accepted friendships."
-    },
-    "/courtRankings/{courtId}/entries/{userId}": {
-      "schema": { "$ref": "#/entities/CourtRankingEntry" },
-      "description": "Per-court shooter leaderboard entries ranked by best contest score on that specific court."
     },
     "/pvpGlobalRankings/{userId}": {
       "schema": { "$ref": "#/entities/PvpGlobalRankingEntry" },

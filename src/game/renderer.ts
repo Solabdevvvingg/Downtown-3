@@ -13,6 +13,7 @@ import {
   RIM_RADIUS,
   STAMINA_EXHAUSTED_THRESHOLD,
 } from './constants';
+import { getBallSkinConfig } from './ballSkins';
 import { CourtThemeConfig, getCourtThemeConfig } from './courts';
 import {
   buildCameraBasis,
@@ -23,6 +24,7 @@ import {
 } from './projection';
 import {
   ActiveBall,
+  BallSkinId,
   BallSlotRecord,
   CourtThemeId,
   DifficultyTier,
@@ -34,6 +36,7 @@ import {
   Particle,
   ProjectedPoint,
   ShooterAnimState,
+  ShotTrajectoryArc,
   Vec3,
 } from './types';
 
@@ -85,9 +88,11 @@ export interface RenderState {
   crowdHypeDuration?: number;
   stamina: number;
   courtTheme: CourtThemeId;
+  ballSkin?: BallSkinId;
   hideShotMeter?: boolean;
   sessionBestScore?: number;
   sessionBestStreak?: number;
+  lastShotTrajectory?: ShotTrajectoryArc | null;
 }
 
 export function renderArena(
@@ -308,7 +313,15 @@ export function renderArena(
     if (bp.visible) {
       drawables.push({
         depth: bp.depth,
-        draw: () => drawActiveBall(ctx, basis, ball, state.streak),
+        draw: () =>
+          drawActiveBall(
+            ctx,
+            basis,
+            ball,
+            state.streak,
+            state.clockTime,
+            state.ballSkin
+          ),
       });
     }
   }
@@ -323,6 +336,11 @@ export function renderArena(
         draw: () => drawTrailParticle(ctx, pp.x, pp.y, pp.scale, pt),
       });
     }
+  }
+
+  // Last shot dotted trajectory arc (optional training aid toggled from Pause Menu)
+  if (state.lastShotTrajectory && state.lastShotTrajectory.points.length >= 2) {
+    collectShotTrajectoryDrawables(ctx, basis, state.lastShotTrajectory, drawables);
   }
 
   drawables.sort((a, b) => b.depth - a.depth);
@@ -1258,7 +1276,18 @@ function drawBallRack(
     };
     const bp = projectPoint(basis, ballPos);
     if (bp.visible) {
-      drawBasketballSprite(ctx, bp.x, bp.y, BALL_RADIUS * bp.scale, slot.isMoney, b * 0.7);
+      drawBasketballSprite(
+        ctx,
+        bp.x,
+        bp.y,
+        BALL_RADIUS * bp.scale,
+        slot.isMoney,
+        b * 0.7,
+        0,
+        false,
+        state.ballSkin ?? 'classic_leather',
+        state.clockTime
+      );
     }
   }
   ctx.restore();
@@ -1272,18 +1301,30 @@ function drawBasketballSprite(
   isMoney: boolean,
   spinAngle: number,
   heatGlow = 0,
-  isRemote = false
+  isRemote = false,
+  ballSkin: BallSkinId = 'classic_leather',
+  clockTime = 0
 ): void {
   if (r < 1.5) return;
   ctx.save();
+
+  const skinCfg = getBallSkinConfig(ballSkin);
 
   if (isRemote) {
     ctx.globalAlpha = 0.65;
   }
 
-  if (heatGlow > 0 && !isRemote) {
-    ctx.shadowColor = isMoney ? '#F59E0B' : '#F9631C';
-    ctx.shadowBlur = Math.min(18, r * 0.9 * heatGlow);
+  const effectiveGlow = isRemote
+    ? 0
+    : Math.max(heatGlow, skinCfg.alwaysTrail ? 0.55 : 0);
+
+  if (effectiveGlow > 0 && !isRemote) {
+    ctx.shadowColor = isMoney
+      ? '#F59E0B'
+      : skinCfg.alwaysTrail
+        ? skinCfg.palette.glowHex
+        : '#F9631C';
+    ctx.shadowBlur = Math.min(20, r * 0.92 * effectiveGlow);
   }
 
   const grad = ctx.createRadialGradient(cx - r * 0.32, cy - r * 0.32, r * 0.1, cx, cy, r);
@@ -1291,16 +1332,16 @@ function drawBasketballSprite(
     grad.addColorStop(0, '#93C5FD');
     grad.addColorStop(0.5, '#3B82F6');
     grad.addColorStop(1, '#1E3A8A');
-  } else if (isMoney) {
+  } else if (isMoney && ballSkin === 'classic_leather') {
     grad.addColorStop(0, '#FDE68A');
     grad.addColorStop(0.35, '#F59E0B');
     grad.addColorStop(0.75, '#B45309');
     grad.addColorStop(1, '#78350F');
   } else {
-    grad.addColorStop(0, '#FB923C');
-    grad.addColorStop(0.4, '#F9631C');
-    grad.addColorStop(0.82, '#C2410C');
-    grad.addColorStop(1, '#7C2D12');
+    grad.addColorStop(0, skinCfg.palette.shellStops[0]);
+    grad.addColorStop(0.38, skinCfg.palette.shellStops[1]);
+    grad.addColorStop(0.78, skinCfg.palette.shellStops[2]);
+    grad.addColorStop(1, skinCfg.palette.shellStops[3]);
   }
 
   ctx.fillStyle = grad;
@@ -1312,20 +1353,54 @@ function drawBasketballSprite(
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.clip();
 
+  // Subtle ambient rim highlight for special skins
+  if (!isRemote && ballSkin === 'fireball') {
+    const pulse = 0.28 + 0.12 * Math.sin(clockTime * 7.5);
+    const ember = ctx.createRadialGradient(cx + r * 0.25, cy + r * 0.25, r * 0.08, cx, cy, r);
+    ember.addColorStop(0, `rgba(254, 240, 138, ${pulse.toFixed(3)})`);
+    ember.addColorStop(0.65, 'rgba(249, 115, 22, 0.14)');
+    ember.addColorStop(1, 'rgba(185, 28, 28, 0)');
+    ctx.fillStyle = ember;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  } else if (!isRemote && ballSkin === 'electric') {
+    const pulse = 0.25 + 0.14 * Math.sin(clockTime * 11.2);
+    const volt = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.2, r * 0.1, cx, cy, r);
+    volt.addColorStop(0, `rgba(224, 242, 254, ${pulse.toFixed(3)})`);
+    volt.addColorStop(0.7, 'rgba(34, 211, 238, 0.12)');
+    volt.addColorStop(1, 'rgba(15, 23, 42, 0)');
+    ctx.fillStyle = volt;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+
   if (isMoney && !isRemote) {
-    ctx.fillStyle = 'rgba(248, 250, 252, 0.86)';
+    ctx.fillStyle =
+      ballSkin === 'electric'
+        ? 'rgba(254, 240, 138, 0.86)'
+        : 'rgba(248, 250, 252, 0.86)';
     ctx.beginPath();
     ctx.ellipse(cx - r * 0.45 * Math.cos(spinAngle), cy, r * 0.32, r, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = 'rgba(29, 78, 216, 0.85)';
+    ctx.fillStyle =
+      ballSkin === 'fireball'
+        ? 'rgba(245, 158, 11, 0.88)'
+        : ballSkin === 'championship_gold'
+          ? 'rgba(16, 185, 129, 0.82)'
+          : 'rgba(29, 78, 216, 0.85)';
     ctx.beginPath();
     ctx.ellipse(cx + r * 0.48 * Math.cos(spinAngle), cy, r * 0.3, r, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  ctx.strokeStyle = 'rgba(20, 14, 10, 0.72)';
-  ctx.lineWidth = Math.max(1, r * 0.085);
+  if (!isRemote && skinCfg.palette.seamGlowColor) {
+    ctx.shadowColor = skinCfg.palette.seamGlowColor;
+    ctx.shadowBlur = Math.max(2, r * 0.32);
+  } else {
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.strokeStyle = isRemote ? 'rgba(20, 14, 10, 0.72)' : skinCfg.palette.seamColor;
+  ctx.lineWidth = Math.max(1, r * 0.088);
 
   const seamOffset = Math.sin(spinAngle) * r * 0.45;
   ctx.beginPath();
@@ -1338,6 +1413,29 @@ function drawBasketballSprite(
   ctx.quadraticCurveTo(cx - seamOffset, cy, cx - seamOffset * 0.3, cy + r);
   ctx.stroke();
 
+  // Electric crackling micro-arc across shell
+  if (!isRemote && ballSkin === 'electric' && r >= 5) {
+    const jag = Math.sin(clockTime * 19 + spinAngle) * r * 0.14;
+    ctx.strokeStyle = 'rgba(224, 242, 254, 0.85)';
+    ctx.lineWidth = Math.max(0.9, r * 0.055);
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.65, cy - r * 0.18);
+    ctx.lineTo(cx - r * 0.18, cy - r * 0.36 + jag);
+    ctx.lineTo(cx + r * 0.12, cy + r * 0.04 - jag);
+    ctx.lineTo(cx + r * 0.62, cy - r * 0.22);
+    ctx.stroke();
+  }
+
+  // Money ball gold rim ring on custom skins so 2x balls remain unmistakably legible
+  if (isMoney && !isRemote && ballSkin !== 'classic_leather') {
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(253, 224, 71, 0.9)';
+    ctx.lineWidth = Math.max(1.2, r * 0.1);
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(1, r - ctx.lineWidth * 0.5), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -1345,7 +1443,9 @@ function drawActiveBall(
   ctx: CanvasRenderingContext2D,
   basis: ReturnType<typeof buildCameraBasis>,
   ball: ActiveBall,
-  streak: number
+  streak: number,
+  clockTime = 0,
+  stateBallSkin: BallSkinId = 'classic_leather'
 ): void {
   const shadowP = projectPoint(basis, { x: ball.pos.x, y: ball.pos.y, z: 0.02 });
   if (shadowP.visible) {
@@ -1359,12 +1459,21 @@ function drawActiveBall(
     ctx.restore();
   }
 
+  const activeSkin: BallSkinId = ball.isRemote
+    ? 'classic_leather'
+    : (ball.ballSkin ?? stateBallSkin);
+  const skinCfg = getBallSkinConfig(activeSkin);
   const effectiveStreak = Math.max(streak, ball.streakAtRelease ?? 0);
   const isHighStreak = !ball.isRemote && effectiveStreak >= 3;
+  const shouldDrawTrail =
+    ball.isRemote || isHighStreak || ball.isMoney || skinCfg.alwaysTrail;
 
-  if ((ball.isRemote || isHighStreak || ball.isMoney) && ball.trail.length > 2) {
+  if (shouldDrawTrail && ball.trail.length > 2) {
     ctx.save();
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const streakBoost = effectiveStreak >= 6 ? 1.24 : effectiveStreak >= 3 ? 1.1 : 1.0;
+
     for (let i = 1; i < ball.trail.length; i++) {
       const p0 = projectPoint(basis, ball.trail[i - 1]);
       const p1 = projectPoint(basis, ball.trail[i]);
@@ -1372,8 +1481,78 @@ function drawActiveBall(
       const frac = i / ball.trail.length;
       const fade = frac * frac;
 
-      if (isHighStreak) {
-        // Outer luminous trajectory aura
+      if (ball.isRemote) {
+        ctx.strokeStyle = `rgba(96, 165, 250, ${fade * 0.35})`;
+        ctx.lineWidth = Math.max(1.5, BALL_RADIUS * p1.scale * 1.1 * frac);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+      } else if (skinCfg.trailStyle === 'electric') {
+        // Outer cyan high-voltage plasma envelope
+        ctx.strokeStyle = `rgba(${skinCfg.palette.trailOuterRgb}, ${fade * (isHighStreak ? 0.36 : 0.28)})`;
+        ctx.lineWidth = Math.max(2.2, BALL_RADIUS * p1.scale * 1.85 * streakBoost * frac);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+
+        // Jagged crackling electric core filament
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        const segLen = Math.hypot(dx, dy) || 1;
+        const nx = -dy / segLen;
+        const ny = dx / segLen;
+        const jitterAmp = Math.min(9, BALL_RADIUS * p1.scale * 0.42) * frac;
+        const j0 = i <= 1 ? 0 : Math.sin(clockTime * 38 + (i - 1) * 2.9) * jitterAmp;
+        const j1 = i >= ball.trail.length - 1 ? 0 : Math.sin(clockTime * 38 + i * 2.9) * jitterAmp;
+
+        ctx.strokeStyle = `rgba(${skinCfg.palette.trailInnerRgb}, ${fade * (isHighStreak ? 0.92 : 0.78)})`;
+        ctx.lineWidth = Math.max(1.3, BALL_RADIUS * p1.scale * 0.58 * frac);
+        ctx.beginPath();
+        ctx.moveTo(p0.x + nx * j0, p0.y + ny * j0);
+        ctx.lineTo(p1.x + nx * j1, p1.y + ny * j1);
+        ctx.stroke();
+      } else if (skinCfg.trailStyle === 'flame') {
+        // Outer scorching crimson-orange plume
+        ctx.strokeStyle = `rgba(${skinCfg.palette.trailOuterRgb}, ${fade * (isHighStreak ? 0.34 : 0.28)})`;
+        ctx.lineWidth = Math.max(2.4, BALL_RADIUS * p1.scale * 2.05 * streakBoost * frac);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+
+        // Mid amber flame band
+        ctx.strokeStyle = `rgba(249, 115, 22, ${fade * 0.48})`;
+        ctx.lineWidth = Math.max(1.8, BALL_RADIUS * p1.scale * 1.25 * frac);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+
+        // Incandescent white-gold core
+        ctx.strokeStyle = `rgba(${skinCfg.palette.trailInnerRgb}, ${fade * (isHighStreak ? 0.86 : 0.72)})`;
+        ctx.lineWidth = Math.max(1.2, BALL_RADIUS * p1.scale * 0.62 * frac);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+      } else if (skinCfg.trailStyle === 'gold') {
+        ctx.strokeStyle = `rgba(${skinCfg.palette.trailOuterRgb}, ${fade * 0.3})`;
+        ctx.lineWidth = Math.max(2, BALL_RADIUS * p1.scale * 1.75 * streakBoost * frac);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(${skinCfg.palette.trailInnerRgb}, ${fade * 0.78})`;
+        ctx.lineWidth = Math.max(1.2, BALL_RADIUS * p1.scale * 0.68 * frac);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+      } else if (isHighStreak) {
+        // Classic Leather high-streak trajectory aura
         ctx.strokeStyle =
           effectiveStreak >= 6 || ball.isMoney
             ? `rgba(245, 158, 11, ${fade * 0.28})`
@@ -1384,7 +1563,6 @@ function drawActiveBall(
         ctx.lineTo(p1.x, p1.y);
         ctx.stroke();
 
-        // Inner crisp arc filament
         ctx.strokeStyle =
           effectiveStreak >= 9
             ? `rgba(254, 240, 138, ${fade * 0.72})`
@@ -1397,9 +1575,7 @@ function drawActiveBall(
         ctx.lineTo(p1.x, p1.y);
         ctx.stroke();
       } else {
-        ctx.strokeStyle = ball.isRemote
-          ? `rgba(96, 165, 250, ${fade * 0.35})`
-          : `rgba(245, 158, 11, ${fade * 0.45})`;
+        ctx.strokeStyle = `rgba(245, 158, 11, ${fade * 0.45})`;
         ctx.lineWidth = Math.max(1.5, BALL_RADIUS * p1.scale * 1.1 * frac);
         ctx.beginPath();
         ctx.moveTo(p0.x, p0.y);
@@ -1412,6 +1588,9 @@ function drawActiveBall(
 
   const bp = projectPoint(basis, ball.pos);
   if (bp.visible) {
+    const skinGlowBoost = skinCfg.alwaysTrail ? 0.75 : 0;
+    const streakGlow =
+      effectiveStreak >= 6 ? 1.25 : effectiveStreak >= 3 ? 1 : ball.isMoney ? 0.6 : 0;
     drawBasketballSprite(
       ctx,
       bp.x,
@@ -1419,9 +1598,144 @@ function drawActiveBall(
       BALL_RADIUS * bp.scale,
       ball.isMoney,
       ball.spinAngle,
-      effectiveStreak >= 6 ? 1.25 : effectiveStreak >= 3 ? 1 : ball.isMoney ? 0.6 : 0,
-      Boolean(ball.isRemote)
+      Math.max(streakGlow, skinGlowBoost),
+      Boolean(ball.isRemote),
+      activeSkin,
+      clockTime
     );
+  }
+}
+
+function getTrajectoryColor(arc: ShotTrajectoryArc): string {
+  if (arc.timingQuality === 'PERFECT') {
+    return arc.isMoney ? '#FEF08A' : '#00ffaa';
+  }
+  if (arc.timingQuality === 'GOOD') {
+    return '#6EE7B7';
+  }
+  if (arc.timingQuality === 'EARLY') {
+    return '#7DD3FC';
+  }
+  return '#FECACA';
+}
+
+function sampleEquidistantArcPoints(points: Vec3[], spacingFt: number): Vec3[] {
+  if (points.length === 0) return [];
+  if (points.length === 1) return [{ ...points[0] }];
+  const sampled: Vec3[] = [{ ...points[0] }];
+  let carry = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    let a = points[i - 1];
+    const b = points[i];
+    let dx = b.x - a.x;
+    let dy = b.y - a.y;
+    let dz = b.z - a.z;
+    let segLen = Math.hypot(dx, dy, dz);
+    if (segLen < 0.0001) continue;
+
+    while (carry + segLen >= spacingFt) {
+      const remain = spacingFt - carry;
+      const t = remain / segLen;
+      const nx = a.x + dx * t;
+      const ny = a.y + dy * t;
+      const nz = a.z + dz * t;
+      const nextPt: Vec3 = { x: nx, y: ny, z: nz };
+      sampled.push(nextPt);
+      a = nextPt;
+      dx = b.x - a.x;
+      dy = b.y - a.y;
+      dz = b.z - a.z;
+      segLen = Math.hypot(dx, dy, dz);
+      carry = 0;
+      if (sampled.length >= 64) return sampled;
+    }
+    carry += segLen;
+  }
+
+  return sampled;
+}
+
+function collectShotTrajectoryDrawables(
+  ctx: CanvasRenderingContext2D,
+  basis: ReturnType<typeof buildCameraBasis>,
+  arc: ShotTrajectoryArc,
+  drawables: { depth: number; draw: () => void }[]
+): void {
+  const fadeStart = Math.max(0.2, arc.fadeAfter - 0.75);
+  const fadeProgress =
+    arc.age <= fadeStart
+      ? 1
+      : Math.max(0, 1 - (arc.age - fadeStart) / Math.max(0.05, arc.fadeAfter - fadeStart));
+  const globalAlpha = fadeProgress * 0.92;
+  if (globalAlpha <= 0.03) return;
+
+  const dotColor = getTrajectoryColor(arc);
+  const dots = sampleEquidistantArcPoints(arc.points, 0.95);
+  const dotCount = dots.length;
+
+  for (let i = 0; i < dotCount; i++) {
+    const pt = dots[i];
+    const p = projectPoint(basis, pt);
+    if (!p.visible) continue;
+    const progress = dotCount > 1 ? i / (dotCount - 1) : 1;
+    const dotAlpha = globalAlpha * (0.42 + 0.58 * progress);
+    const radius = Math.max(1.9, Math.min(4.8, p.scale * (0.125 + 0.03 * progress)));
+    drawables.push({
+      depth: p.depth + 0.04,
+      draw: () => {
+        ctx.save();
+        ctx.globalAlpha = dotAlpha;
+        ctx.fillStyle = dotColor;
+        ctx.strokeStyle = 'rgba(3, 5, 9, 0.92)';
+        ctx.lineWidth = Math.max(1.4, radius * 0.62);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fill();
+        ctx.restore();
+      },
+    });
+  }
+
+  // Show a crisp dotted/ring timing reference where the arc crosses rim height relative to hoop center
+  if (arc.rimCrossPoint) {
+    const crossProj = projectPoint(basis, arc.rimCrossPoint);
+    const hoopProj = projectPoint(basis, arc.hoopPos);
+    if (crossProj.visible) {
+      const markerR = Math.max(4.5, Math.min(13, crossProj.scale * 0.34));
+      drawables.push({
+        depth: crossProj.depth - 0.02,
+        draw: () => {
+          ctx.save();
+          ctx.globalAlpha = globalAlpha * 0.95;
+
+          if (hoopProj.visible && arc.outcome !== 'MADE') {
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = dotColor;
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(crossProj.x, crossProj.y);
+            ctx.lineTo(hoopProj.x, hoopProj.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
+          ctx.strokeStyle = 'rgba(3, 5, 9, 0.92)';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(crossProj.x, crossProj.y, markerR, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = dotColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(crossProj.x, crossProj.y, markerR, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        },
+      });
+    }
   }
 }
 
@@ -1446,6 +1760,7 @@ interface AthleteRenderParams {
   accentColor: string;
   alpha: number;
   heldBall: { isMoney: boolean } | null;
+  ballSkin?: BallSkinId;
   isGhost?: boolean;
   labelTag?: string;
   labelAlpha?: number;
@@ -1563,6 +1878,7 @@ function drawAthleteModel(
     accentColor,
     alpha,
     heldBall,
+    ballSkin = 'classic_leather',
     isGhost = false,
     labelTag,
     labelAlpha = 1,
@@ -2422,7 +2738,10 @@ function drawAthleteModel(
           BALL_RADIUS * db.scale,
           heldBall.isMoney,
           clockTime * (4.5 + dribbleTier * 2.4),
-          streak >= 6 ? 1.15 : streak >= 3 ? 0.85 : 0
+          streak >= 6 ? 1.15 : streak >= 3 ? 0.85 : 0,
+          isGhost,
+          isGhost ? 'classic_leather' : ballSkin,
+          clockTime
         );
       }
     } else {
@@ -2440,7 +2759,10 @@ function drawAthleteModel(
           BALL_RADIUS * hb.scale,
           heldBall.isMoney,
           0.3,
-          streak >= 3 ? 0.8 : 0
+          streak >= 3 ? 0.8 : 0,
+          isGhost,
+          isGhost ? 'classic_leather' : ballSkin,
+          clockTime
         );
       }
     }
@@ -2561,6 +2883,7 @@ function drawShooter(
     accentColor: '#00ffaa',
     alpha: 1.0,
     heldBall,
+    ballSkin: state.ballSkin ?? 'classic_leather',
     labelTag: state.shooterName?.trim() || 'Shooter',
     labelAlpha: state.shooterLabelAlpha,
   });
@@ -2714,13 +3037,13 @@ function drawShotMeter(
     ctx.stroke();
   }
 
-  ctx.strokeStyle = 'rgba(11, 14, 20, 0.85)';
-  ctx.lineWidth = isCompact ? 13 : 15;
+  ctx.strokeStyle = 'rgba(3, 5, 9, 0.96)';
+  ctx.lineWidth = isCompact ? 15 : 17;
   ctx.beginPath();
   ctx.arc(mx, my, radius, startAngle, endAngle);
   ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
   ctx.lineWidth = isCompact ? 9 : 11;
   ctx.beginPath();
   ctx.arc(mx, my, radius, startAngle, endAngle);
@@ -2862,17 +3185,42 @@ function drawTrailParticle(
   const r = Math.max(1.4, pt.size * scale * 0.14 * (0.4 + 0.6 * t));
 
   ctx.save();
-  ctx.globalAlpha = fade * 0.28;
-  ctx.fillStyle = pt.glowColor ?? pt.color;
-  ctx.beginPath();
-  ctx.arc(px, py, r * 2.15, 0, Math.PI * 2);
-  ctx.fill();
+  if (pt.shape === 'spark') {
+    const angle = pt.rot ?? Math.atan2(-pt.vz, pt.vx || 0.01);
+    ctx.translate(px, py);
+    ctx.rotate(angle);
+    ctx.globalAlpha = fade * 0.34;
+    ctx.fillStyle = pt.glowColor ?? pt.color;
+    ctx.fillRect(-r * 2.8, -r * 0.7, r * 5.6, r * 1.4);
 
-  ctx.globalAlpha = fade * 0.88;
-  ctx.fillStyle = pt.color;
-  ctx.beginPath();
-  ctx.arc(px, py, r, 0, Math.PI * 2);
-  ctx.fill();
+    ctx.globalAlpha = fade * 0.94;
+    ctx.fillStyle = pt.color;
+    ctx.fillRect(-r * 2.1, -r * 0.34, r * 4.2, r * 0.68);
+  } else if (pt.shape === 'confetti') {
+    const w = Math.max(2.6, r * 2.1);
+    const h = Math.max(1.2, w * 0.55 * Math.abs(Math.cos((pt.rot ?? 0) * 1.5)));
+    ctx.translate(px, py);
+    ctx.rotate(pt.rot ?? 0);
+    ctx.globalAlpha = fade * 0.3;
+    ctx.fillStyle = pt.glowColor ?? pt.color;
+    ctx.fillRect(-w * 0.7, -h * 0.7, w * 1.4, h * 1.4);
+
+    ctx.globalAlpha = fade * 0.92;
+    ctx.fillStyle = pt.color;
+    ctx.fillRect(-w * 0.5, -h * 0.5, w, h);
+  } else {
+    ctx.globalAlpha = fade * 0.28;
+    ctx.fillStyle = pt.glowColor ?? pt.color;
+    ctx.beginPath();
+    ctx.arc(px, py, r * 2.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = fade * 0.88;
+    ctx.fillStyle = pt.color;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 

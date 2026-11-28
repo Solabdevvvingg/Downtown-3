@@ -42,10 +42,10 @@ const MatchupProfileCard: React.FC<ProfileCardProps> = ({ player, isMe, delay, r
       initial={{ opacity: 0, x: isMe ? -22 : 22, y: 12 }}
       animate={{ opacity: 1, x: 0, y: 0 }}
       transition={{ type: 'spring', stiffness: 320, damping: 26, delay }}
-      className={`bg-[#0F1117]/96 backdrop-blur-md border rounded-[4px] p-3 sm:p-4 shadow-2xl min-w-0 ${
+      className={`bg-[#05070B]/98 backdrop-blur-md border rounded-[4px] p-3 sm:p-4 shadow-2xl min-w-0 ${
         isMe
           ? 'border-[#00ffaa] shadow-[0_0_24px_rgba(0,255,170,0.18)]'
-          : 'border-white/30'
+          : 'border-white/35'
       }`}
     >
       {/* Top identity row */}
@@ -53,16 +53,16 @@ const MatchupProfileCard: React.FC<ProfileCardProps> = ({ player, isMe, delay, r
         <div
           className={`w-10 h-10 sm:w-12 sm:h-12 rounded-[2px] flex items-center justify-center font-display text-base sm:text-xl font-extrabold uppercase shrink-0 border ${
             isMe
-              ? 'bg-[#00ffaa]/18 border-[#00ffaa] text-[#6EE7B7]'
-              : 'bg-[#161922] border-white/35 text-white'
+              ? 'bg-[#04241B] border-[#00ffaa] text-[#00ffaa]'
+              : 'bg-[#141824] border-white/40 text-[#FFFFFF]'
           }`}
           aria-hidden="true"
         >
           {getInitials(player.name)}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#CBD5E1] flex items-center gap-1.5">
-            <span className={isMe ? 'text-[#6EE7B7]' : 'text-[#FEF08A]'}>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#FFFFFF] flex items-center gap-1.5">
+            <span className={isMe ? 'text-[#00ffaa]' : 'text-[#FEF08A]'}>
               {isMe ? 'You' : 'Opponent'}
             </span>
             {player.isHost && (
@@ -73,7 +73,7 @@ const MatchupProfileCard: React.FC<ProfileCardProps> = ({ player, isMe, delay, r
             )}
           </div>
           <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-            <span className="font-display text-base sm:text-xl font-extrabold uppercase tracking-tight text-white truncate leading-tight">
+            <span className="font-display text-base sm:text-xl font-extrabold uppercase tracking-tight text-[#FFFFFF] truncate leading-tight">
               {player.name}
             </span>
             {!isMe && <RivalBadgeIcon rivalry={rivalry} />}
@@ -82,23 +82,23 @@ const MatchupProfileCard: React.FC<ProfileCardProps> = ({ player, isMe, delay, r
       </div>
 
       {/* Clean hairline stats grid */}
-      <div className="grid grid-cols-2 gap-x-2.5 gap-y-2 mt-3 pt-2.5 border-t border-white/20">
+      <div className="grid grid-cols-2 gap-x-2.5 gap-y-2 mt-3 pt-2.5 border-t border-white/25">
         <div className="min-w-0">
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#CBD5E1]">
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#F8FAFC]">
             PVP Record
           </div>
-          <div className="font-mono text-xs sm:text-sm font-bold text-white tabular-nums mt-0.5">
+          <div className="font-mono text-xs sm:text-sm font-bold text-[#FFFFFF] tabular-nums mt-0.5">
             {wins}W-{losses}L-{draws}D
           </div>
         </div>
 
         <div className="min-w-0">
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#CBD5E1]">
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#F8FAFC]">
             Best Score
           </div>
           <div
             className={`font-mono text-xs sm:text-sm font-bold tabular-nums mt-0.5 ${
-              isMe ? 'text-[#6EE7B7]' : 'text-white'
+              isMe ? 'text-[#00ffaa]' : 'text-[#FFFFFF]'
             }`}
           >
             {bestScore > 0 ? bestScore : '—'}
@@ -106,16 +106,16 @@ const MatchupProfileCard: React.FC<ProfileCardProps> = ({ player, isMe, delay, r
         </div>
 
         <div className="min-w-0">
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#CBD5E1]">
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#F8FAFC]">
             Best Streak
           </div>
-          <div className="font-mono text-xs sm:text-sm font-bold text-white tabular-nums mt-0.5">
+          <div className="font-mono text-xs sm:text-sm font-bold text-[#FFFFFF] tabular-nums mt-0.5">
             {bestStreak > 0 ? `${bestStreak} · ${accuracyPct}%` : accuracyPct > 0 ? `${accuracyPct}%` : '—'}
           </div>
         </div>
 
         <div className="min-w-0">
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#CBD5E1]">
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#F8FAFC]">
             Money Rack
           </div>
           <div className="font-mono text-xs sm:text-sm font-bold text-[#FEF08A] tabular-nums mt-0.5">
@@ -153,23 +153,23 @@ export const PvpIntroOverlay: React.FC<PvpIntroOverlayProps> = ({
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-        className="mx-auto w-full max-w-2xl bg-[#07090E]/94 backdrop-blur-md border border-white/25 rounded-[4px] px-3.5 sm:px-5 py-2.5 sm:py-3 shadow-xl"
+        className="mx-auto w-full max-w-2xl bg-[#05070B]/98 backdrop-blur-md border border-white/35 rounded-[4px] px-3.5 sm:px-5 py-2.5 sm:py-3 shadow-xl"
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#6EE7B7] truncate">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa] truncate">
               {match.leagueName ? `${match.leagueName} · 1v1 Shootout` : '1v1 Arena Shootout'}
               {rivalry && rivalry.wins + rivalry.losses + rivalry.draws > 0
                 ? ` · H2H ${rivalry.wins}-${rivalry.losses}-${rivalry.draws}`
                 : ''}
             </div>
-            <div className="font-display text-base sm:text-xl font-extrabold uppercase tracking-tight text-white leading-tight mt-0.5">
+            <div className="font-display text-base sm:text-xl font-extrabold uppercase tracking-tight text-[#FFFFFF] leading-tight mt-0.5">
               {isFinalCountdown ? 'Shooters Set — Tip-Off' : 'Court & Ball Racks Preview'}
             </div>
           </div>
 
           <div className="text-right shrink-0">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#CBD5E1]">
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#F8FAFC]">
               Match Starts
             </div>
             <motion.div
@@ -178,7 +178,7 @@ export const PvpIntroOverlay: React.FC<PvpIntroOverlayProps> = ({
               animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 420, damping: 22 }}
               className={`font-mono text-xl sm:text-2xl font-bold leading-none tabular-nums mt-0.5 ${
-                isFinalCountdown ? 'text-[#FEF08A]' : 'text-[#6EE7B7]'
+                isFinalCountdown ? 'text-[#FEF08A]' : 'text-[#00ffaa]'
               }`}
             >
               {clampedSec > 0 ? `${clampedSec}s` : 'LIVE'}
@@ -186,7 +186,7 @@ export const PvpIntroOverlay: React.FC<PvpIntroOverlayProps> = ({
           </div>
         </div>
 
-        <div className="w-full h-1.5 bg-white/15 rounded-[1px] overflow-hidden mt-2">
+        <div className="w-full h-1.5 bg-white/20 rounded-[1px] overflow-hidden mt-2">
           <div
             className={`h-full transition-all duration-300 ${
               isFinalCountdown ? 'bg-[#FDE047]' : 'bg-[#00ffaa]'
@@ -220,7 +220,7 @@ export const PvpIntroOverlay: React.FC<PvpIntroOverlayProps> = ({
           {/* Center VS marker */}
           <div
             aria-hidden="true"
-            className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-[2px] bg-[#07090E] border-2 border-[#00ffaa] items-center justify-center font-display text-sm font-extrabold text-[#6EE7B7] shadow-lg"
+            className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-[2px] bg-[#05070B] border-2 border-[#00ffaa] items-center justify-center font-display text-sm font-extrabold text-[#00ffaa] shadow-lg"
           >
             VS
           </div>
@@ -228,14 +228,14 @@ export const PvpIntroOverlay: React.FC<PvpIntroOverlayProps> = ({
           {opponent ? (
             <MatchupProfileCard player={opponent} isMe={false} delay={0.1} rivalry={rivalry} />
           ) : (
-            <div className="bg-[#0F1117]/95 border border-white/25 rounded-[4px] p-4 flex items-center justify-center font-mono text-xs font-semibold text-[#E2E8F0]">
+            <div className="bg-[#05070B]/98 border border-white/35 rounded-[4px] p-4 flex items-center justify-center font-mono text-xs font-semibold text-[#FFFFFF]">
               Connecting rival...
             </div>
           )}
         </div>
 
         <div className="mt-2 text-center">
-          <span className="inline-block bg-[#07090E]/94 border border-white/25 px-3 py-1 rounded-[2px] font-mono text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-white">
+          <span className="inline-block bg-[#05070B]/98 border border-white/35 px-3 py-1 rounded-[2px] font-mono text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#FFFFFF]">
             1:10 (70s) · 5 Racks + Half-Court Moneyball · Rival tally top-left
           </span>
         </div>

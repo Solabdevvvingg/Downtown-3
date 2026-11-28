@@ -63,7 +63,7 @@ export const FindingOpponentOverlay: React.FC<FindingOpponentOverlayProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 12 }}
         transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-        className="w-full max-w-md bg-[#0F1117] border border-white/25 rounded-[4px] p-5 sm:p-6 shadow-2xl relative overflow-hidden"
+        className="w-full max-w-md bg-[#0A0D14] border border-white/35 rounded-[4px] p-5 sm:p-6 shadow-2xl relative overflow-hidden"
       >
         {/* Subtle animated top sweep */}
         <motion.div
@@ -76,32 +76,32 @@ export const FindingOpponentOverlay: React.FC<FindingOpponentOverlayProps> = ({
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-5">
           <div>
-            <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#6EE7B7]">
+            <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#00ffaa]">
               <Radar className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '3.2s' }} />
               <span>{leagueName ? 'League Matchmaking' : 'Ranked 1v1 Matchmaking'}</span>
             </div>
-            <h2 className="font-display text-2xl sm:text-3xl font-extrabold uppercase tracking-tight text-white leading-none mt-1.5">
+            <h2 className="font-display text-2xl sm:text-3xl font-extrabold uppercase tracking-tight text-[#FFFFFF] leading-none mt-1.5">
               Finding Opponent
             </h2>
           </div>
 
           <div className="text-right shrink-0">
-            <div className="font-mono text-[10px] font-semibold text-[#CBD5E1] uppercase tracking-[0.12em]">
+            <div className="font-mono text-[10px] font-semibold text-[#F8FAFC] uppercase tracking-[0.12em]">
               Wait Time
             </div>
-            <div className="font-mono text-xl font-bold text-[#6EE7B7] tabular-nums mt-0.5">
+            <div className="font-mono text-xl font-bold text-[#00ffaa] tabular-nums mt-0.5">
               {timerLabel}
             </div>
           </div>
         </div>
 
         {leagueName && (
-          <div className="mb-4 px-3 py-2 rounded-[2px] bg-[#00ffaa]/15 border border-[#00ffaa]/60 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2 text-xs font-bold text-[#6EE7B7] truncate">
-              <Trophy className="w-3.5 h-3.5 shrink-0" />
+          <div className="mb-4 px-3 py-2 rounded-[2px] bg-[#04241B] border border-[#00ffaa]/75 flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-xs font-bold text-[#A7F3D0] truncate">
+              <Trophy className="w-3.5 h-3.5 shrink-0 text-[#00ffaa]" />
               <span className="truncate">{leagueName}</span>
             </span>
-            <span className="font-mono text-[11px] font-bold text-white shrink-0 tabular-nums">
+            <span className="font-mono text-[11px] font-bold text-[#FFFFFF] shrink-0 tabular-nums">
               {leagueQueuedCount} Searching
             </span>
           </div>
@@ -122,7 +122,7 @@ export const FindingOpponentOverlay: React.FC<FindingOpponentOverlayProps> = ({
               animate={{ scale: [0.65, 1.45], opacity: [0.85, 0] }}
               transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut', delay: 0.9 }}
             />
-            <div className="relative w-16 h-16 rounded-full bg-[#07090E] border-2 border-[#00ffaa] flex items-center justify-center shadow-[0_0_24px_rgba(0,255,170,0.3)]">
+            <div className="relative w-16 h-16 rounded-full bg-[#05070B] border-2 border-[#00ffaa] flex items-center justify-center shadow-[0_0_24px_rgba(0,255,170,0.3)]">
               <svg viewBox="0 0 40 40" className="w-8 h-8" aria-hidden="true">
                 <circle cx="20" cy="20" r="15" fill="none" stroke="#00ffaa" strokeWidth="2.4" />
                 <path d="M 6 20 Q 20 12 34 20" fill="none" stroke="#FFFFFF" strokeWidth="1.8" />
@@ -131,10 +131,10 @@ export const FindingOpponentOverlay: React.FC<FindingOpponentOverlayProps> = ({
             </div>
           </div>
 
-          <p className="text-xs sm:text-sm font-semibold text-white text-center mt-3">
+          <p className="text-xs sm:text-sm font-semibold text-[#FFFFFF] text-center mt-3">
             {stageText}
           </p>
-          <p className="font-mono text-[11px] font-medium text-[#CBD5E1] mt-1 tabular-nums">
+          <p className="font-mono text-[11px] font-medium text-[#F8FAFC] mt-1 tabular-nums">
             {lobbyStats.onlinePlayers} online · {lobbyStats.queuedPlayers} in queue ·{' '}
             {lobbyStats.activeMatches} live matches
           </p>
@@ -142,20 +142,20 @@ export const FindingOpponentOverlay: React.FC<FindingOpponentOverlayProps> = ({
 
         {/* Side-by-Side Locked vs Scanning Matchup */}
         <div className="grid grid-cols-2 gap-2.5 mb-5">
-          <div className="bg-[#07090E] border border-[#00ffaa]/70 rounded-[2px] p-3">
+          <div className="bg-[#05070B] border border-[#00ffaa]/75 rounded-[2px] p-3">
             <div className="flex items-center justify-between gap-1 mb-1">
-              <span className="font-mono text-[10px] font-bold uppercase text-[#6EE7B7]">
+              <span className="font-mono text-[10px] font-bold uppercase text-[#00ffaa]">
                 You · Ready
               </span>
-              <Shield className="w-3 h-3 text-[#6EE7B7]" />
+              <Shield className="w-3 h-3 text-[#00ffaa]" />
             </div>
-            <div className="text-sm font-bold text-white truncate">{playerName}</div>
-            <div className="font-mono text-[11px] font-semibold text-[#E2E8F0] mt-1 tabular-nums">
+            <div className="text-sm font-bold text-[#FFFFFF] truncate">{playerName}</div>
+            <div className="font-mono text-[11px] font-semibold text-[#F8FAFC] mt-1 tabular-nums">
               {career.pvpWins}W-{career.pvpLosses}L-{career.pvpDraws}D · MR {moneyLabel}
             </div>
           </div>
 
-          <div className="bg-[#07090E] border border-white/25 rounded-[2px] p-3 relative overflow-hidden">
+          <div className="bg-[#05070B] border border-white/30 rounded-[2px] p-3 relative overflow-hidden">
             <motion.div
               aria-hidden="true"
               className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
@@ -163,13 +163,13 @@ export const FindingOpponentOverlay: React.FC<FindingOpponentOverlayProps> = ({
               transition={{ duration: 1.4, repeat: Infinity, ease: 'linear' }}
             />
             <div className="flex items-center justify-between gap-1 mb-1">
-              <span className="font-mono text-[10px] font-bold uppercase text-[#E2E8F0]">
+              <span className="font-mono text-[10px] font-bold uppercase text-[#FFFFFF]">
                 Challenger
               </span>
-              <Users className="w-3 h-3 text-[#E2E8F0]" />
+              <Users className="w-3 h-3 text-[#FFFFFF]" />
             </div>
-            <div className="text-sm font-bold text-white">Searching...</div>
-            <div className="font-mono text-[11px] font-medium text-[#CBD5E1] mt-1">
+            <div className="text-sm font-bold text-[#FFFFFF]">Searching...</div>
+            <div className="font-mono text-[11px] font-medium text-[#F8FAFC] mt-1">
               Waiting for lock-in
             </div>
           </div>
@@ -178,7 +178,7 @@ export const FindingOpponentOverlay: React.FC<FindingOpponentOverlayProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="w-full min-h-[44px] py-2.5 px-4 rounded-[2px] bg-[#161922] hover:bg-[#1E2330] border border-white/25 text-white font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          className="w-full min-h-[44px] py-2.5 px-4 rounded-[2px] bg-[#141824] hover:bg-[#1E2434] border border-white/35 text-[#FFFFFF] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
           <span>Cancel Search</span>

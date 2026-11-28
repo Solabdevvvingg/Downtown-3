@@ -1,15 +1,22 @@
 import { HIGH_SCORE_STORAGE_KEY } from './constants';
+import { getBallSkinConfig } from './ballSkins';
 import { getCourtThemeConfig } from './courts';
-import { CameraMode, CareerStats, ContestHighlight, CourtThemeId, RivalryRecord } from './types';
+import { BallSkinId, CameraMode, CareerStats, ContestHighlight, CourtThemeId, HapticIntensity, RivalryRecord } from './types';
 
 export const CAREER_STATS_STORAGE_KEY = 'downtown3_career_stats_v1';
 export const SELECTED_COURT_STORAGE_KEY = 'downtown3_selected_court_v1';
+export const SELECTED_BALL_SKIN_STORAGE_KEY = 'downtown3_selected_ball_skin_v1';
 export const LAST_HIGHLIGHT_STORAGE_KEY = 'downtown3_last_highlight_v1';
 export const RIVALRIES_STORAGE_KEY = 'downtown3_rivalries_v1';
 export const GUEST_NAME_STORAGE_KEY = 'downtown3_guest_name_v1';
 export const LAST_VISIT_STORAGE_KEY = 'downtown3_last_visit_at_v1';
 export const INSTANT_REPLAY_STORAGE_KEY = 'downtown3_instant_replay_v1';
 export const CAMERA_MODE_STORAGE_KEY = 'downtown3_camera_mode_v1';
+export const SHOT_TRAJECTORY_STORAGE_KEY = 'downtown3_shot_trajectory_v1';
+export const AUDIO_VOLUME_STORAGE_KEY = 'downtown3_audio_volume_v1';
+export const AUDIO_MUTED_STORAGE_KEY = 'downtown3_audio_muted_v1';
+export const SHOT_SENSITIVITY_STORAGE_KEY = 'downtown3_shot_sensitivity_v1';
+export const HAPTIC_INTENSITY_STORAGE_KEY = 'downtown3_haptic_intensity_v1';
 export const LONG_AWAY_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 export function normalizeOpponentKey(name: string): string {
@@ -51,6 +58,13 @@ const DEFAULT_CAREER_STATS: CareerStats = {
   bestFastBreakSplitsMs: [...DEFAULT_SPLITS],
   fastBreakContests: 0,
 };
+
+export function createEmptyCareerStats(): CareerStats {
+  return {
+    ...DEFAULT_CAREER_STATS,
+    bestFastBreakSplitsMs: [...DEFAULT_SPLITS],
+  };
+}
 
 export function loadCareerStats(): CareerStats {
   try {
@@ -113,6 +127,23 @@ export function loadSelectedCourt(): CourtThemeId {
 export function saveSelectedCourt(theme: CourtThemeId): void {
   try {
     localStorage.setItem(SELECTED_COURT_STORAGE_KEY, theme);
+  } catch {
+    // Ignore storage failures
+  }
+}
+
+export function loadSelectedBallSkin(): BallSkinId {
+  try {
+    const raw = localStorage.getItem(SELECTED_BALL_SKIN_STORAGE_KEY);
+    return getBallSkinConfig(raw ?? undefined).id;
+  } catch {
+    return 'classic_leather';
+  }
+}
+
+export function saveSelectedBallSkin(skin: BallSkinId): void {
+  try {
+    localStorage.setItem(SELECTED_BALL_SKIN_STORAGE_KEY, skin);
   } catch {
     // Ignore storage failures
   }
@@ -269,3 +300,100 @@ export function saveCameraMode(mode: CameraMode): void {
     // Ignore storage failures
   }
 }
+
+export function loadShotTrajectoryEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(SHOT_TRAJECTORY_STORAGE_KEY);
+    return raw === '1' || raw === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function saveShotTrajectoryEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(SHOT_TRAJECTORY_STORAGE_KEY, enabled ? '1' : '0');
+  } catch {
+    // Ignore storage failures
+  }
+}
+
+export function loadAudioVolume(): number {
+  try {
+    const raw = localStorage.getItem(AUDIO_VOLUME_STORAGE_KEY);
+    if (raw === null) return 100;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return 100;
+    return Math.max(0, Math.min(100, Math.round(parsed)));
+  } catch {
+    return 100;
+  }
+}
+
+export function saveAudioVolume(volume: number): void {
+  try {
+    const clamped = Math.max(0, Math.min(100, Math.round(volume)));
+    localStorage.setItem(AUDIO_VOLUME_STORAGE_KEY, String(clamped));
+  } catch {
+    // Ignore storage failures
+  }
+}
+
+export function loadAudioMuted(): boolean {
+  try {
+    const raw = localStorage.getItem(AUDIO_MUTED_STORAGE_KEY);
+    return raw === '1' || raw === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function saveAudioMuted(muted: boolean): void {
+  try {
+    localStorage.setItem(AUDIO_MUTED_STORAGE_KEY, muted ? '1' : '0');
+  } catch {
+    // Ignore storage failures
+  }
+}
+
+export function loadShotSensitivity(): number {
+  try {
+    const raw = localStorage.getItem(SHOT_SENSITIVITY_STORAGE_KEY);
+    if (raw === null) return 1.0;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return 1.0;
+    return Math.max(0.6, Math.min(1.5, Math.round(parsed * 20) / 20));
+  } catch {
+    return 1.0;
+  }
+}
+
+export function saveShotSensitivity(sensitivity: number): void {
+  try {
+    const clamped = Math.max(0.6, Math.min(1.5, Math.round(sensitivity * 20) / 20));
+    localStorage.setItem(SHOT_SENSITIVITY_STORAGE_KEY, clamped.toFixed(2));
+  } catch {
+    // Ignore storage failures
+  }
+}
+
+export function loadHapticIntensity(): HapticIntensity {
+  try {
+    const raw = localStorage.getItem(HAPTIC_INTENSITY_STORAGE_KEY);
+    if (raw === 'LOW' || raw === 'HIGH' || raw === 'MEDIUM') {
+      return raw;
+    }
+    return 'MEDIUM';
+  } catch {
+    return 'MEDIUM';
+  }
+}
+
+export function saveHapticIntensity(intensity: HapticIntensity): void {
+  try {
+    localStorage.setItem(HAPTIC_INTENSITY_STORAGE_KEY, intensity);
+  } catch {
+    // Ignore storage failures
+  }
+}
+

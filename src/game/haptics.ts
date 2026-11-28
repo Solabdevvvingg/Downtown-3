@@ -1,3 +1,5 @@
+import { HapticIntensity } from './types';
+
 const RIM_HAPTIC_COOLDOWN_MS = 65;
 const FOOTSTEP_HAPTIC_COOLDOWN_MS = 110;
 const ZONE_CUE_HAPTIC_COOLDOWN_MS = 180;
@@ -6,12 +8,36 @@ let lastRimHapticAt = 0;
 let lastFootstepHapticAt = 0;
 let lastZoneCueHapticAt = 0;
 let hapticsMuted = false;
+let hapticIntensity: HapticIntensity = 'MEDIUM';
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-function vibrateSafe(pattern: number | number[]): void {
+function getPulseScale(intensity: HapticIntensity): number {
+  if (intensity === 'LOW') return 0.48;
+  if (intensity === 'HIGH') return 1.75;
+  return 1.0;
+}
+
+function scalePattern(
+  pattern: number | number[],
+  intensity: HapticIntensity
+): number | number[] {
+  if (intensity === 'MEDIUM') return pattern;
+  const pulseScale = getPulseScale(intensity);
+  const pauseScale = intensity === 'LOW' ? 0.85 : 0.92;
+  if (typeof pattern === 'number') {
+    return Math.max(4, Math.min(130, Math.round(pattern * pulseScale)));
+  }
+  return pattern.map((ms, idx) =>
+    idx % 2 === 0
+      ? Math.max(4, Math.min(130, Math.round(ms * pulseScale)))
+      : Math.max(8, Math.round(ms * pauseScale))
+  );
+}
+
+function vibrateRaw(pattern: number | number[]): void {
   if (hapticsMuted) return;
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
     return;
@@ -23,6 +49,10 @@ function vibrateSafe(pattern: number | number[]): void {
   }
 }
 
+function vibrateSafe(pattern: number | number[]): void {
+  vibrateRaw(scalePattern(pattern, hapticIntensity));
+}
+
 export function setHapticsMuted(muted: boolean): void {
   hapticsMuted = muted;
   if (muted && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -31,6 +61,24 @@ export function setHapticsMuted(muted: boolean): void {
     } catch {
       // Ignore cancel failures
     }
+  }
+}
+
+export function getHapticIntensity(): HapticIntensity {
+  return hapticIntensity;
+}
+
+export function setHapticIntensity(intensity: HapticIntensity): void {
+  hapticIntensity = intensity;
+}
+
+export function triggerHapticPreview(intensity: HapticIntensity = hapticIntensity): void {
+  if (intensity === 'LOW') {
+    vibrateRaw(9);
+  } else if (intensity === 'HIGH') {
+    vibrateRaw([26, 18, 36]);
+  } else {
+    vibrateRaw([15, 16, 20]);
   }
 }
 
@@ -52,13 +100,33 @@ export function triggerPerfectZoneCueHaptic(): void {
 export function triggerShotReleaseHaptic(
   timingQuality: 'PERFECT' | 'GOOD' | 'EARLY' | 'LATE'
 ): void {
+  if (hapticIntensity === 'LOW') {
+    if (timingQuality === 'PERFECT') {
+      vibrateRaw([7, 14, 10]);
+    } else if (timingQuality === 'GOOD') {
+      vibrateRaw(8);
+    } else {
+      vibrateRaw(5);
+    }
+    return;
+  }
+  if (hapticIntensity === 'HIGH') {
+    if (timingQuality === 'PERFECT') {
+      vibrateRaw([24, 16, 36]);
+    } else if (timingQuality === 'GOOD') {
+      vibrateRaw(28);
+    } else {
+      vibrateRaw(18);
+    }
+    return;
+  }
   if (timingQuality === 'PERFECT') {
     // Crisp high-confidence double snap on Gold release
-    vibrateSafe([14, 16, 20]);
+    vibrateRaw([14, 16, 20]);
   } else if (timingQuality === 'GOOD') {
-    vibrateSafe(16);
+    vibrateRaw(16);
   } else {
-    vibrateSafe(10);
+    vibrateRaw(10);
   }
 }
 
@@ -93,9 +161,22 @@ export function triggerRimHitHaptic(impactSpeed: number): void {
   }
   lastRimHapticAt = now;
 
-  // Scale tactile pulse length to collision intensity
+  if (hapticIntensity === 'LOW') {
+    vibrateRaw(impactSpeed >= 14.5 ? 14 : impactSpeed >= 9 ? 9 : 6);
+    return;
+  }
+  if (hapticIntensity === 'HIGH') {
+    if (impactSpeed >= 14.5) {
+      vibrateRaw([42, 18, 22]);
+    } else {
+      vibrateRaw(impactSpeed >= 9 ? 34 : 22);
+    }
+    return;
+  }
+
+  // Medium: scale tactile pulse length to collision intensity
   const duration = impactSpeed >= 14.5 ? 28 : impactSpeed >= 9 ? 18 : 12;
-  vibrateSafe(duration);
+  vibrateRaw(duration);
 }
 
 export function triggerRimHangHaptic(): void {
